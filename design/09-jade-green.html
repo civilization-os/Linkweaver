@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReqFlow · 翡翠绿</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f7f2; color: #1a2e24; min-height: 100vh; }
+
+  .app { display: flex; height: 100vh; }
+  .sidebar { width: 240px; background: #1a3a2a; padding: 28px 18px; display: flex; flex-direction: column; }
+  .logo { font-size: 22px; font-weight: 700; color: #d4edda; margin-bottom: 36px; }
+  .logo span { color: #7dcea0; }
+  .nav-item { padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; color: rgba(255,255,255,.5); cursor: pointer; margin-bottom: 4px; transition: all .2s; }
+  .nav-item:hover { background: rgba(255,255,255,.06); color: #d4edda; }
+  .nav-item.active { background: rgba(125,206,160,.15); color: #7dcea0; }
+  .nav-item .badge { float: right; background: rgba(255,255,255,.06); color: rgba(255,255,255,.35); font-size: 11px; padding: 1px 8px; border-radius: 8px; font-weight: 600; }
+
+  .main { flex: 1; padding: 32px 36px; overflow-y: auto; }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+  .page-title { font-size: 26px; font-weight: 700; color: #1a2e24; }
+  .page-title small { font-size: 13px; font-weight: 400; color: #5a8a72; margin-left: 12px; }
+  .btn-primary { background: #2d8f5e; color: #fff; border: none; padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s; }
+  .btn-primary:hover { background: #237a4e; box-shadow: 0 4px 12px rgba(45,143,94,.3); }
+
+  .section-title { font-size: 14px; font-weight: 600; color: #5a8a72; margin-bottom: 14px; margin-top: 28px; letter-spacing: .5px; }
+  .section-title:first-of-type { margin-top: 0; }
+
+  .entity-card { background: #fff; border-radius: 16px; padding: 18px 22px; border: 1px solid #d4e8dc; margin-bottom: 12px; transition: all .2s; }
+  .entity-card:hover { border-color: #a3c9b4; box-shadow: 0 2px 12px rgba(45,143,94,.06); }
+  .entity-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .entity-name { font-size: 16px; font-weight: 600; color: #1a2e24; }
+  .entity-name .type-tag { font-size: 11px; background: #e8f5ee; color: #2d8f5e; padding: 2px 10px; border-radius: 6px; font-weight: 600; margin-left: 8px; }
+  .entity-fields { display: flex; flex-wrap: wrap; gap: 6px; }
+  .field-tag { font-size: 12px; background: #f0f7f2; padding: 4px 10px; border-radius: 8px; color: #3a5a4a; font-family: 'SF Mono', 'Fira Code', monospace; }
+  .field-tag .type { color: #2d8f5e; font-weight: 500; }
+  .field-tag .required { color: #c0392b; }
+
+  .flow-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fff; border-radius: 12px; border: 1px solid #d4e8dc; margin-bottom: 8px; }
+  .flow-node { background: #f0f7f2; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #1a2e24; }
+  .flow-arrow { color: #8ab8a0; font-size: 18px; }
+  .flow-label { font-size: 12px; color: #5a8a72; }
+
+  .stat-row { display: flex; gap: 14px; margin-bottom: 28px; }
+  .stat-card { flex: 1; background: #fff; border-radius: 16px; padding: 18px 22px; border: 1px solid #d4e8dc; }
+  .stat-num { font-size: 28px; font-weight: 700; color: #1a2e24; }
+  .stat-label { font-size: 12px; color: #5a8a72; margin-top: 4px; }
+
+  .leaf { position: fixed; top: 20px; right: 40px; font-size: 40px; opacity: .06; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="leaf">🌿</div>
+<div class="app">
+  <div class="sidebar">
+    <div class="logo">◈ <span>ReqFlow</span></div>
+    <div class="nav-item active">📋 项目总览 <span class="badge">1</span></div>
+    <div class="nav-item">📦 数据实体</div>
+    <div class="nav-item">🔀 数据流</div>
+    <div class="nav-item">📝 需求</div>
+    <div class="nav-item">⛓️ 约束</div>
+    <div class="nav-item" style="margin-top:auto;color:rgba(255,255,255,.2);font-size:12px;">v0.1.0 · MVP</div>
+  </div>
+  <div class="main">
+    <div class="top-bar">
+      <div class="page-title">电商平台 <small>v1.0 · 需求分析</small></div>
+      <button class="btn-primary">+ 新建实体</button>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-num">7</div><div class="stat-label">数据实体</div></div>
+      <div class="stat-card"><div class="stat-num">12</div><div class="stat-label">数据流</div></div>
+      <div class="stat-card"><div class="stat-num">24</div><div class="stat-label">需求</div></div>
+      <div class="stat-card"><div class="stat-num">8</div><div class="stat-label">业务约束</div></div>
+    </div>
+    <div class="section-title">📦 数据实体</div>
+    <div class="entity-card">
+      <div class="entity-header">
+        <span class="entity-name">User <span class="type-tag">实体</span></span>
+        <span style="font-size:12px;color:#5a8a72;">6 字段</span>
+      </div>
+      <div class="entity-fields">
+        <span class="field-tag"><span class="type">string</span> id <span class="required">*</span></span>
+        <span class="field-tag"><span class="type">string</span> email</span>
+        <span class="field-tag"><span class="type">string</span> password</span>
+        <span class="field-tag"><span class="type">struct</span> profile</span>
+        <span class="field-tag"><span class="type">[]Address</span> addresses</span>
+        <span class="field-tag"><span class="type">enum</span> status</span>
+      </div>
+    </div>
+    <div class="entity-card">
+      <div class="entity-header">
+        <span class="entity-name">Order <span class="type-tag">实体</span></span>
+        <span style="font-size:12px;color:#5a8a72;">8 字段</span>
+      </div>
+      <div class="entity-fields">
+        <span class="field-tag"><span class="type">string</span> id <span class="required">*</span></span>
+        <span class="field-tag"><span class="type">ref</span> user_id → User</span>
+        <span class="field-tag"><span class="type">[]OrderItem</span> items</span>
+        <span class="field-tag"><span class="type">float</span> total</span>
+        <span class="field-tag"><span class="type">enum</span> status</span>
+      </div>
+    </div>
+    <div class="section-title">🔀 关键数据流</div>
+    <div class="flow-row">
+      <span class="flow-node">注册表单</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-node">User</span>
+      <span style="font-size:12px;color:#5a8a72;">[status: active]</span>
+      <span class="flow-label">email, password → bcrypt → User</span>
+    </div>
+    <div class="flow-row">
+      <span class="flow-node">购物车</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-node">Order</span>
+      <span style="font-size:12px;color:#5a8a72;">[status: pending]</span>
+      <span class="flow-label">items, user → Order</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

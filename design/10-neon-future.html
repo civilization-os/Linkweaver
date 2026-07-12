@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReqFlow · 霓虹未来</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Space Grotesk', -apple-system, sans-serif; background: #0b0b1a; color: #e0e0f0; min-height: 100vh; }
+
+  .app { display: flex; height: 100vh; position: relative; overflow: hidden; }
+  .app::before { content: ''; position: fixed; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(ellipse at 30% 20%, rgba(110,0,255,.06) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(0,200,255,.04) 0%, transparent 50%); pointer-events: none; }
+
+  .sidebar { width: 240px; background: rgba(11,11,26,.95); border-right: 1px solid rgba(110,0,255,.15); padding: 28px 18px; display: flex; flex-direction: column; position: relative; z-index: 1; }
+  .logo { font-size: 20px; font-weight: 700; margin-bottom: 36px; background: linear-gradient(135deg, #6e00ff, #00c8ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .nav-item { padding: 10px 14px; border-radius: 10px; font-size: 14px; font-weight: 500; color: rgba(255,255,255,.4); cursor: pointer; margin-bottom: 4px; transition: all .2s; position: relative; }
+  .nav-item:hover { color: #e0e0f0; background: rgba(110,0,255,.08); }
+  .nav-item.active { color: #fff; background: linear-gradient(135deg, rgba(110,0,255,.15), rgba(0,200,255,.08)); border: 1px solid rgba(110,0,255,.2); }
+  .nav-item.active::before { content: ''; position: absolute; left: -1px; top: 50%; transform: translateY(-50%); width: 3px; height: 20px; background: linear-gradient(180deg, #6e00ff, #00c8ff); border-radius: 0 2px 2px 0; }
+  .nav-item .badge { float: right; background: rgba(255,255,255,.04); color: rgba(255,255,255,.25); font-size: 11px; padding: 1px 8px; border-radius: 6px; font-weight: 600; }
+
+  .main { flex: 1; padding: 32px 36px; overflow-y: auto; position: relative; z-index: 1; }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+  .page-title { font-size: 26px; font-weight: 700; background: linear-gradient(135deg, #e0e0f0, #8888bb); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .page-title small { font-size: 13px; font-weight: 400; background: none; -webkit-text-fill-color: rgba(255,255,255,.3); margin-left: 12px; }
+  .btn-primary { background: linear-gradient(135deg, #6e00ff, #00c8ff); color: #fff; border: none; padding: 10px 24px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s; }
+  .btn-primary:hover { box-shadow: 0 4px 20px rgba(110,0,255,.3); transform: translateY(-1px); }
+
+  .section-title { font-size: 13px; font-weight: 600; color: rgba(255,255,255,.3); margin-bottom: 14px; margin-top: 28px; letter-spacing: 2px; text-transform: uppercase; }
+  .section-title:first-of-type { margin-top: 0; }
+
+  .entity-card { background: rgba(255,255,255,.02); border-radius: 16px; padding: 18px 22px; border: 1px solid rgba(255,255,255,.04); margin-bottom: 12px; transition: all .2s; }
+  .entity-card:hover { border-color: rgba(110,0,255,.15); background: rgba(110,0,255,.03); }
+  .entity-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .entity-name { font-size: 16px; font-weight: 600; color: #e0e0f0; }
+  .entity-name .type-tag { font-size: 11px; background: rgba(0,200,255,.08); color: #00c8ff; padding: 2px 10px; border-radius: 6px; font-weight: 600; margin-left: 8px; }
+  .entity-fields { display: flex; flex-wrap: wrap; gap: 6px; }
+  .field-tag { font-size: 12px; background: rgba(255,255,255,.03); padding: 4px 10px; border-radius: 8px; color: rgba(255,255,255,.5); font-family: 'SF Mono', 'Fira Code', monospace; border: 1px solid rgba(255,255,255,.04); }
+  .field-tag .type { background: linear-gradient(135deg, #6e00ff, #00c8ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: 500; }
+  .field-tag .required { color: #ff4080; }
+
+  .flow-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(255,255,255,.02); border-radius: 12px; border: 1px solid rgba(255,255,255,.04); margin-bottom: 8px; }
+  .flow-node { background: rgba(110,0,255,.06); padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; color: #c0c0e0; border: 1px solid rgba(110,0,255,.08); }
+  .flow-arrow { color: rgba(0,200,255,.3); font-size: 18px; }
+  .flow-label { font-size: 12px; color: rgba(255,255,255,.25); }
+
+  .stat-row { display: flex; gap: 14px; margin-bottom: 28px; }
+  .stat-card { flex: 1; background: rgba(255,255,255,.02); border-radius: 16px; padding: 18px 22px; border: 1px solid rgba(255,255,255,.04); }
+  .stat-num { font-size: 28px; font-weight: 700; background: linear-gradient(135deg, #e0e0f0, #8888bb); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .stat-label { font-size: 12px; color: rgba(255,255,255,.25); margin-top: 4px; letter-spacing: 1px; }
+
+  .orb { position: fixed; top: -100px; right: -100px; width: 400px; height: 400px; border-radius: 50%; background: radial-gradient(circle, rgba(110,0,255,.08) 0%, transparent 70%); pointer-events: none; }
+  .orb2 { position: fixed; bottom: -150px; left: -100px; width: 500px; height: 500px; border-radius: 50%; background: radial-gradient(circle, rgba(0,200,255,.05) 0%, transparent 70%); pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="orb"></div>
+<div class="orb2"></div>
+<div class="app">
+  <div class="sidebar">
+    <div class="logo">◆ REQFLOW</div>
+    <div class="nav-item active">📋 项目总览 <span class="badge">1</span></div>
+    <div class="nav-item">📦 数据实体</div>
+    <div class="nav-item">🔀 数据流</div>
+    <div class="nav-item">📝 需求</div>
+    <div class="nav-item">⛓️ 约束</div>
+    <div class="nav-item" style="margin-top:auto;color:rgba(255,255,255,.1);font-size:12px;">v0.1.0 · MVP</div>
+  </div>
+  <div class="main">
+    <div class="top-bar">
+      <div class="page-title">电商平台 <small>v1.0 · 需求分析</small></div>
+      <button class="btn-primary">+ 新建实体</button>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-num">7</div><div class="stat-label">数据实体</div></div>
+      <div class="stat-card"><div class="stat-num">12</div><div class="stat-label">数据流</div></div>
+      <div class="stat-card"><div class="stat-num">24</div><div class="stat-label">需求</div></div>
+      <div class="stat-card"><div class="stat-num">8</div><div class="stat-label">业务约束</div></div>
+    </div>
+    <div class="section-title">📦 数据实体</div>
+    <div class="entity-card">
+      <div class="entity-header">
+        <span class="entity-name">User <span class="type-tag">ENTITY</span></span>
+        <span style="font-size:12px;color:rgba(255,255,255,.2);">6 字段</span>
+      </div>
+      <div class="entity-fields">
+        <span class="field-tag"><span class="type">string</span> id <span class="required">*</span></span>
+        <span class="field-tag"><span class="type">string</span> email</span>
+        <span class="field-tag"><span class="type">string</span> password</span>
+        <span class="field-tag"><span class="type">struct</span> profile</span>
+        <span class="field-tag"><span class="type">[]Address</span> addresses</span>
+        <span class="field-tag"><span class="type">enum</span> status</span>
+      </div>
+    </div>
+    <div class="entity-card">
+      <div class="entity-header">
+        <span class="entity-name">Order <span class="type-tag">ENTITY</span></span>
+        <span style="font-size:12px;color:rgba(255,255,255,.2);">8 字段</span>
+      </div>
+      <div class="entity-fields">
+        <span class="field-tag"><span class="type">string</span> id <span class="required">*</span></span>
+        <span class="field-tag"><span class="type">ref</span> user_id → User</span>
+        <span class="field-tag"><span class="type">[]OrderItem</span> items</span>
+        <span class="field-tag"><span class="type">float</span> total</span>
+        <span class="field-tag"><span class="type">enum</span> status</span>
+      </div>
+    </div>
+    <div class="section-title">🔀 关键数据流</div>
+    <div class="flow-row">
+      <span class="flow-node">注册表单</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-node">User</span>
+      <span style="font-size:12px;color:rgba(255,255,255,.2);">[status: active]</span>
+      <span class="flow-label">email, password → bcrypt → User</span>
+    </div>
+    <div class="flow-row">
+      <span class="flow-node">购物车</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-node">Order</span>
+      <span style="font-size:12px;color:rgba(255,255,255,.2);">[status: pending]</span>
+      <span class="flow-label">items, user → Order</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

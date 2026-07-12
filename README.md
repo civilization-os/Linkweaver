@@ -1,0 +1,100 @@
+﻿# Linkweaver
+
+> 智能需求与业务架构协同流图系统
+
+Linkweaver 是一个融合了**需求梳理、拓扑业务流设计、微服务架构可视化、动态业务流演示以及 MCP 协议 AI 联动**的新一代可视化架构设计工具。
+
+## ✨ 核心特性
+
+### 🗺️ 可视化画布
+- **实体节点**（数据表/服务/角色）拖拽布局，支持字段定义
+- **区域分组**（Region），按服务领域划分，支持折叠/展开
+- **连接线**，支持正向/反向/双向数据流
+- **画布缩放**与视图重置
+
+### 🔥 业务流（Business Flow）
+- 创建并管理多个业务流程（如"用户登录到购买全链路"）
+- 选中业务流后，相关节点和线段单独高亮，其余元素虚化降噪
+- **粒子流向动画**：一枚发光能量球从起始节点出发，沿业务流路径飞越各节点和连接线
+  - 节点被"触碰"时会产生霓虹脉冲闪光特效
+  - 支持播放速度实时调节（200ms - 2000ms）
+
+### 🤖 MCP 协议集成
+通过 Model Context Protocol（MCP）暴露完整 API，大模型可直接操作项目：
+- list_projects / get_project
+- create_node / update_node / delete_node
+- create_edge / update_edge
+- list_business_flows / create_business_flow / update_business_flow / delete_business_flow
+
+### 📊 项目管理
+- 多项目切换，需求文档管理
+- 画布自动布局（Format）
+- PNG / GIF 导出
+
+## 🚀 快速开始
+
+### 前置要求
+- Node.js 18+
+- Go 1.21+
+
+### 启动开发环境
+
+`ash
+# 1. 启动后端服务（REST API + MCP SSE）
+cd server
+go build -o reqflow-mcp.exe .
+.\reqflow-mcp.exe --sse
+
+# 2. 启动前端
+cd web
+npm install
+npm run dev
+`
+
+浏览器访问 http://localhost:5173
+
+### MCP 接入配置
+
+在 AI 工具（如 Claude Desktop）的 MCP 配置中添加：
+
+`json
+{
+  "mcpServers": {
+    "linkweaver": {
+      "url": "http://localhost:8080/sse"
+    }
+  }
+}
+`
+
+## 🏗️ 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 前端 | React 18 + TypeScript + Vite + Tailwind CSS |
+| 状态管理 | Zustand |
+| 后端 | Go + MCP SDK |
+| 数据存储 | JSON 文件持久化 |
+| 协议 | REST API + MCP SSE |
+
+## 📁 项目结构
+
+`
+Linkweaver/
+├── web/          # React 前端
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Canvas/       # 主画布
+│   │   │   ├── Toolbar/      # 工具栏
+│   │   │   ├── Sidebar/      # 项目侧边栏
+│   │   │   └── CanvasSidePanel/  # 业务流面板
+│   │   ├── store/            # Zustand 状态
+│   │   └── types/            # TypeScript 类型
+└── server/       # Go 后端
+    ├── main.go   # MCP 工具注册 + HTTP 路由
+    └── store/    # 数据持久化层
+`
+
+## 📝 许可证
+
+MIT License

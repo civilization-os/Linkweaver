@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReqFlow · 日式和风</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Noto Sans SC', -apple-system, sans-serif; background: #f5f0e8; color: #3d3229; min-height: 100vh; }
+  body::before { content: ''; position: fixed; inset: 0; background: url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M 30 0 L 60 30 L 30 60 L 0 30 Z' fill='none' stroke='rgba(0,0,0,.02)' stroke-width='.5'/%3E%3C/svg%3E"); pointer-events: none; }
+
+  .app { display: flex; height: 100vh; position: relative; }
+  .sidebar { width: 220px; background: #ede7db; border-right: 1px solid #d9d0c0; padding: 36px 16px; display: flex; flex-direction: column; }
+  .logo { font-family: 'Noto Serif SC', serif; font-size: 22px; font-weight: 700; color: #5d4a38; margin-bottom: 44px; letter-spacing: 4px; }
+  .logo span { color: #b8865a; }
+  .nav-item { padding: 10px 14px; border-radius: 6px; font-size: 14px; font-weight: 500; color: #7a6a5a; cursor: pointer; margin-bottom: 4px; transition: all .2s; letter-spacing: 1px; }
+  .nav-item:hover { background: rgba(0,0,0,.03); color: #3d3229; }
+  .nav-item.active { background: #d9d0c0; color: #3d3229; }
+  .nav-item .badge { float: right; background: rgba(0,0,0,.05); color: #7a6a5a; font-size: 11px; padding: 1px 8px; border-radius: 4px; font-weight: 500; }
+
+  .main { flex: 1; padding: 36px 40px; overflow-y: auto; }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+  .page-title { font-size: 24px; font-weight: 700; color: #3d3229; font-family: 'Noto Serif SC', serif; letter-spacing: 2px; }
+  .page-title small { font-size: 13px; font-weight: 400; color: #a09080; margin-left: 16px; font-family: 'Noto Sans SC', sans-serif; letter-spacing: 1px; }
+  .btn-primary { background: #b8865a; color: #fff; border: none; padding: 8px 22px; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all .2s; letter-spacing: 1px; }
+  .btn-primary:hover { background: #a0704a; }
+
+  .section-title { font-size: 14px; font-weight: 500; color: #a09080; margin-bottom: 14px; margin-top: 28px; letter-spacing: 2px; border-bottom: 1px solid #d9d0c0; padding-bottom: 6px; }
+  .section-title:first-of-type { margin-top: 0; }
+
+  .entity-card { background: rgba(255,255,255,.6); border-radius: 4px; padding: 18px 22px; border: 1px solid #d9d0c0; margin-bottom: 12px; transition: all .2s; }
+  .entity-card:hover { background: rgba(255,255,255,.8); border-color: #c0b09a; }
+  .entity-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .entity-name { font-size: 16px; font-weight: 600; color: #3d3229; }
+  .entity-name .type-tag { font-size: 11px; background: #ede7db; color: #7a6a5a; padding: 2px 10px; border-radius: 3px; font-weight: 500; margin-left: 8px; }
+  .entity-fields { display: flex; flex-wrap: wrap; gap: 6px; }
+  .field-tag { font-size: 12px; background: rgba(255,255,255,.5); padding: 3px 10px; border-radius: 3px; color: #5d4a38; font-family: 'SF Mono', 'Fira Code', monospace; border: 1px solid #e0d8ca; }
+  .field-tag .type { color: #b8865a; font-weight: 500; }
+  .field-tag .required { color: #c0392b; }
+
+  .flow-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(255,255,255,.5); border-radius: 4px; border: 1px solid #d9d0c0; margin-bottom: 8px; }
+  .flow-node { background: #ede7db; padding: 4px 10px; border-radius: 3px; font-size: 13px; font-weight: 500; color: #3d3229; }
+  .flow-arrow { color: #b09a80; font-size: 16px; }
+  .flow-label { font-size: 12px; color: #a09080; }
+
+  .stat-row { display: flex; gap: 14px; margin-bottom: 28px; }
+  .stat-card { flex: 1; background: rgba(255,255,255,.6); border-radius: 4px; padding: 18px 22px; border: 1px solid #d9d0c0; }
+  .stat-num { font-size: 28px; font-weight: 700; color: #3d3229; font-family: 'Noto Serif SC', serif; }
+  .stat-label { font-size: 12px; color: #a09080; margin-top: 4px; letter-spacing: 1px; }
+
+  .washi-tape { position: absolute; top: 0; left: 220px; width: 40px; height: 12px; background: rgba(184,134,90,.15); transform: rotate(-3deg); }
+</style>
+</head>
+<body>
+<div class="washi-tape"></div>
+<div class="app">
+  <div class="sidebar">
+    <div class="logo">需 <span>求</span></div>
+    <div class="nav-item active">📋 概览 <span class="badge">1</span></div>
+    <div class="nav-item">📦 实体</div>
+    <div class="nav-item">🔀 流</div>
+    <div class="nav-item">📝 需求</div>
+    <div class="nav-item">⛓️ 制約</div>
+    <div class="nav-item" style="margin-top:auto;color:#c0b09a;font-size:11px;">v0.1.0 · MVP</div>
+  </div>
+  <div class="main">
+    <div class="top-bar">
+      <div class="page-title">电商平台 <small>v1.0 · 需要分析</small></div>
+      <button class="btn-primary">新規 实体</button>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-num">七</div><div class="stat-label">数据实体</div></div>
+      <div class="stat-card"><div class="stat-num">十二</div><div class="stat-label">数据流</div></div>
+      <div class="stat-card"><div class="stat-num">廿四</div><div class="stat-label">需求</div></div>
+      <div class="stat-card"><div class="stat-num">八</div><div class="stat-label">制約</div></div>
+    </div>
+    <div class="section-title">📦 数据实体</div>
+    <div class="entity-card">
+      <div class="entity-header">
+        <span class="entity-name">User <span class="type-tag">实体</span></span>
+        <span style="font-size:12px;color:#a09080;">6 字段</span>
+      </div>
+      <div class="entity-fields">
+        <span class="field-tag"><span class="type">string</span> id <span class="required">*</span></span>
+        <span class="field-tag"><span class="type">string</span> email</span>
+        <span class="field-tag"><span class="type">string</span> password</span>
+        <span class="field-tag"><span class="type">struct</span> profile</span>
+        <span class="field-tag"><span class="type">[]Address</span> addresses</span>
+        <span class="field-tag"><span class="type">enum</span> status</span>
+      </div>
+    </div>
+    <div class="entity-card">
+      <div class="entity-header">
+        <span class="entity-name">Order <span class="type-tag">实体</span></span>
+        <span style="font-size:12px;color:#a09080;">8 字段</span>
+      </div>
+      <div class="entity-fields">
+        <span class="field-tag"><span class="type">string</span> id <span class="required">*</span></span>
+        <span class="field-tag"><span class="type">ref</span> user_id → User</span>
+        <span class="field-tag"><span class="type">[]OrderItem</span> items</span>
+        <span class="field-tag"><span class="type">float</span> total</span>
+        <span class="field-tag"><span class="type">enum</span> status</span>
+      </div>
+    </div>
+    <div class="section-title">🔀 数据流</div>
+    <div class="flow-row">
+      <span class="flow-node">登録</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-node">User</span>
+      <span style="font-size:12px;color:#a09080;">[status: active]</span>
+      <span class="flow-label">email → bcrypt → User</span>
+    </div>
+    <div class="flow-row">
+      <span class="flow-node">買物籠</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-node">Order</span>
+      <span style="font-size:12px;color:#a09080;">[status: pending]</span>
+      <span class="flow-label">items → Order</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

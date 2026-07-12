@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Custom Grid background lines */
+.grid-layer line {
+  stroke: #e4e4e7; /* zinc-200 */
+  stroke-width: 0.5;
+}
+
+/* Flow line animations for Canvas edges */
+@keyframes flow-fwd {
+  from { stroke-dashoffset: 20; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes flow-rev {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 20; }
+}
+
+.edge-flow {
+  stroke-dasharray: 10 10;
+  opacity: 1;
+  pointer-events: none;
+}
+.edge-flow.fwd {
+  animation: flow-fwd 0.8s linear infinite;
+}
+.edge-flow.rev {
+  animation: flow-rev 0.8s linear infinite;
+}
+
+/* Loading screen */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  font-size: 0.875rem;
+  color: #71717a; /* zinc-500 */
+}

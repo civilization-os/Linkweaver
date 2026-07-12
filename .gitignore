@@ -1,0 +1,27 @@
+﻿# Dependencies
+node_modules/
+web/node_modules/
+
+# Build outputs
+web/dist/
+server/*.exe
+server/reqflow-mcp
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data
+data/
+
+# Logs
+*.log
