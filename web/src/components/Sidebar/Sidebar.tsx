@@ -71,8 +71,8 @@ export default function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div className="mt-auto pt-4 border-t border-zinc-200 text-xs text-zinc-400 font-medium">
-        {activeProject ? `${activeProject.name} ${activeProject.version}` : 'v0.1.0'}
+      <div className="mt-auto pt-4 border-t border-zinc-200 flex justify-center items-center text-xs text-zinc-300 font-bold tracking-wide">
+        v1.0.0
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8081/api'
+const API_BASE = '/api'
 
 async function request(path: string, options?: RequestInit) {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -19,6 +19,8 @@ export const api = {
   getProject: (id: string) => request(`/projects/${id}`),
   createProject: (name: string) =>
     request('/projects', { method: 'POST', body: JSON.stringify({ name }) }),
+  updateProject: (id: string, updates: any) =>
+    request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(updates) }),
   deleteProject: (id: string) =>
     request(`/projects/${id}`, { method: 'DELETE' }),
 
@@ -33,8 +35,10 @@ export const api = {
   // Edges
   addEdge: (projectId: string, edge: any) =>
     request(`/projects/${projectId}/edges`, { method: 'POST', body: JSON.stringify(edge) }),
-  deleteEdge: (projectId: string, idx: number) =>
-    request(`/projects/${projectId}/edges/${idx}`, { method: 'DELETE' }),
+  updateEdge: (projectId: string, edgeId: string, updates: any) =>
+    request(`/projects/${projectId}/edges/${edgeId}`, { method: 'PUT', body: JSON.stringify(updates) }),
+  deleteEdge: (projectId: string, edgeId: string) =>
+    request(`/projects/${projectId}/edges/${edgeId}`, { method: 'DELETE' }),
 
   // Regions
   addRegion: (projectId: string, region: any) =>

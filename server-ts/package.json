@@ -1,0 +1,29 @@
+{
+  "name": "reqflow-mcp",
+  "version": "1.0.0",
+  "description": "ReqFlow MCP Server",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.5.0",
+    "@types/dagre": "^0.7.54",
+    "cors": "^2.8.5",
+    "dagre": "^0.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "proper-lockfile": "^4.1.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.9.0",
+    "@types/proper-lockfile": "^4.1.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}

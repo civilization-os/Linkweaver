@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { FlowNode, DataFlow, Region, Project, ViewportState } from '../types'
+import dagre from 'dagre'
+import type { FlowNode, DataFlow, Region, Project, ViewportState, BusinessFlow } from '../types'
 import { api } from '../api'
 
 function now() { return Date.now() }
@@ -9,35 +10,41 @@ function uid(prefix: string) { return prefix + Math.random().toString(36).slice(
 interface AppState {
   projects: Project[]
   activeProjectId: string | null
+  selectedNodeId: string | null
   viewport: ViewportState
-  selectedEdgeIdx: number | null
+  selectedEdgeId: string | null
   flowAnimation: boolean
   flowAnimationSpeed: number
   showGrid: boolean
   page: 'overview' | 'canvas'
   loading: boolean
-
+  searchQuery: string
   currentProject: () => Project | undefined
 
   init: () => Promise<void>
+  setSearchQuery: (q: string) => void
   setPage: (page: 'overview' | 'canvas') => void
+  selectNode: (id: string | null) => void
   addProject: (name: string) => Promise<void>
+  updateProject: (id: string, updates: Partial<Project>) => Promise<void>
   deleteProject: (id: string) => Promise<void>
   switchProject: (id: string) => void
   setViewport: (vp: Partial<ViewportState>) => void
   moveNode: (id: string, x: number, y: number) => void
   setNodeRegion: (id: string, regionId: string | undefined) => void
   addNode: (node: FlowNode) => void
-  selectEdge: (idx: number | null) => void
-  setEdgeDir: (idx: number, dir: 'fwd' | 'rev' | 'both') => void
+  selectEdge: (id: string | null) => void
+  setEdgeDir: (id: string, dir: 'fwd' | 'rev' | 'both') => void
   addEdge: (edge: DataFlow) => void
-  deleteEdge: (idx: number) => void
+  updateEdge: (edgeId: string, updates: Partial<DataFlow>) => Promise<void>
+  deleteEdge: (edgeId: string) => Promise<void>
   toggleFlow: () => void
   setFlowAnimationSpeed: (speed: number) => void
   toggleGrid: () => void
   moveRegion: (id: string, dx: number, dy: number) => void
   resizeRegion: (id: string, w: number, h: number) => void
   addRegion: (region: Region) => void
+  updateRegion: (id: string, updates: Partial<Region>) => void
   deleteNode: (id: string) => void
   deleteRegion: (id: string) => void
   toggleRegionCollapse: (id: string) => void
@@ -61,15 +68,19 @@ export const useStore = create<AppState>((set, get) => ({
   activeProjectId: null,
   activeBusinessFlowId: null,
   editingBusinessFlowId: null,
+  selectedNodeId: null,
   viewport: { x: 0, y: 0, scale: 1 },
-  selectedEdgeIdx: null,
+  selectedEdgeId: null,
   flowAnimation: false,
   flowAnimationSpeed: 1000,
   showGrid: true,
   page: 'overview',
   loading: true,
+  searchQuery: '',
 
   currentProject: () => get().projects.find(p => p.id === get().activeProjectId),
+
+  setSearchQuery: (q) => set({ searchQuery: q }),
 
   init: async () => {
     try {
@@ -90,26 +101,39 @@ export const useStore = create<AppState>((set, get) => ({
 
   setPage: (page) => set({ page }),
 
+  selectNode: (id) => set({ selectedNodeId: id }),
+
   addProject: async (name) => {
     try {
       const p = (await api.createProject(name)) as Project
       set((s) => ({ projects: [...s.projects, p], activeProjectId: p.id, page: 'canvas' }))
     } catch {
       const p: Project = { id: uid('proj-'), name, version: 'v1.0', nodes: [], edges: [], regions: [], requirements: [], createdAt: now(), updatedAt: now() }
-      set((s) => ({ projects: [...s.projects, p], activeProjectId: p.id, page: 'canvas' }))
+      if (p) {
+        set({ projects: [...get().projects, p], activeProjectId: p.id })
+      }
     }
   },
 
-  deleteProject: async (id) => {
-    try { await api.deleteProject(id) } catch {}
-    set((s) => {
-      const remaining = s.projects.filter(p => p.id !== id)
-      if (remaining.length === 0) return s
-      return { projects: remaining, activeProjectId: s.activeProjectId === id ? remaining[0].id : s.activeProjectId }
-    })
+  updateProject: async (id, updates) => {
+    try {
+      await api.updateProject(id, updates)
+      await get().syncCurrentProject()
+    } catch {}
   },
 
-  switchProject: (id) => set({ activeProjectId: id, page: 'canvas', selectedEdgeIdx: null }),
+  deleteProject: async (id) => {
+    try {
+      await api.deleteProject(id)
+      set((s) => ({
+        projects: s.projects.filter(p => p.id !== id),
+        activeProjectId: s.activeProjectId === id ? (s.projects.find(p => p.id !== id)?.id ?? null) : s.activeProjectId,
+        page: s.activeProjectId === id ? (s.projects.find(p => p.id !== id) ? 'canvas' : 'overview') : s.page
+      }))
+    } catch {}
+  },
+
+  switchProject: (id) => set({ activeProjectId: id, page: 'canvas', selectedEdgeId: null }),
 
   setViewport: (vp) => set((s) => ({ viewport: { ...s.viewport, ...vp } })),
 
@@ -157,7 +181,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   addEdge: (edge) => {
     const proj = get().projects.find(p => p.id === get().activeProjectId)
-    if (proj) api.addEdge(proj.id, { ...edge, id: undefined }).catch(() => {})
+    if (proj) api.addEdge(proj.id, { ...edge, id: undefined }).then(() => get().syncCurrentProject()).catch(() => {})
     set((s) => ({
       projects: s.projects.map(p =>
         p.id === s.activeProjectId ? { ...p, edges: [...p.edges, edge], updatedAt: now() } : p
@@ -165,27 +189,36 @@ export const useStore = create<AppState>((set, get) => ({
     }))
   },
 
-  deleteEdge: (idx) => {
-    const proj = get().projects.find(p => p.id === get().activeProjectId)
-    if (proj) api.deleteEdge(proj.id, idx).catch(() => {})
-    set((s) => ({
-      projects: s.projects.map(p =>
-        p.id === s.activeProjectId
-          ? { ...p, edges: p.edges.filter((_, i) => i !== idx), selectedEdgeIdx: s.selectedEdgeIdx === idx ? null : s.selectedEdgeIdx, updatedAt: now() }
-          : p
-      ),
-    }))
+  updateEdge: async (edgeId, updates) => {
+    const p = get().currentProject()
+    if (!p) return
+    try {
+      await api.updateEdge(p.id, edgeId, updates)
+      await get().syncCurrentProject()
+    } catch {}
   },
 
-  selectEdge: (idx) => set({ selectedEdgeIdx: idx }),
+  deleteEdge: async (edgeId) => {
+    const proj = get().projects.find(p => p.id === get().activeProjectId)
+    if (proj) {
+      try {
+        await api.deleteEdge(proj.id, edgeId)
+        await get().syncCurrentProject()
+      } catch {}
+    }
+  },
 
-  setEdgeDir: (idx, dir) => set((s) => {
-    const proj = s.projects.find(p => p.id === s.activeProjectId)
-    if (!proj || !proj.edges[idx]) return s
-    const edges = [...proj.edges]
-    edges[idx] = { ...edges[idx], dir }
-    return { projects: s.projects.map(p => p.id === s.activeProjectId ? { ...p, edges, updatedAt: now() } : p) }
-  }),
+  selectEdge: (id) => set({ selectedEdgeId: id }),
+
+  setEdgeDir: async (id, dir) => {
+    const proj = get().projects.find(p => p.id === get().activeProjectId)
+    if (proj) {
+      try {
+        await api.updateEdge(proj.id, id, { dir })
+        await get().syncCurrentProject()
+      } catch {}
+    }
+  },
 
   toggleFlow: () => set((s) => ({ flowAnimation: !s.flowAnimation })),
   setFlowAnimationSpeed: (speed: number) => set({ flowAnimationSpeed: speed }),
@@ -245,48 +278,49 @@ export const useStore = create<AppState>((set, get) => ({
     const nodes = [...proj.nodes]
     const regions = [...proj.regions]
 
-    // 1. Layout independent nodes (no regionId)
-    const independentNodes = nodes.filter(n => !n.regionId)
-    independentNodes.forEach((node, idx) => {
-      const targetX = 150 + idx * 300
-      const targetY = 20
-      node.x = targetX
-      node.y = targetY
-      api.updateNode(proj.id, node.id, { x: targetX, y: targetY }).catch(() => {})
+    const g = new dagre.graphlib.Graph({ compound: true })
+    g.setGraph({ rankdir: 'LR', align: 'UL', nodesep: 80, ranksep: 150, edgesep: 40 })
+    g.setDefaultEdgeLabel(() => ({}))
+
+    regions.forEach(r => {
+      g.setNode(r.id, {})
     })
 
-    // 2. Layout regions and their nodes
-    const regionGap = 60
-    const startX = 100
-    const startY = 150
-    const regionWidth = 360
-    const nodeWidth = 180
-    const nodeHeight = 85
-    const nodeGap = 40
-    const headerHeight = 60
+    nodes.forEach(n => {
+      const fieldCount = n.fields ? n.fields.length : 0
+      const actualHeight = 60 + fieldCount * 22
+      g.setNode(n.id, { width: 180 + 40, height: actualHeight + 40 }) // Add virtual padding to node size to push apart
+      if (n.regionId) {
+        g.setParent(n.id, n.regionId)
+      }
+    })
 
-    regions.forEach((region, rIdx) => {
-      const rx = startX + rIdx * (regionWidth + regionGap)
-      const ry = startY
-      region.x = rx
-      region.y = ry
-      
-      const regionNodes = nodes.filter(n => n.regionId === region.id)
-      const computedHeight = Math.max(360, headerHeight + regionNodes.length * (nodeHeight + nodeGap) + 20)
-      region.w = regionWidth
-      region.h = computedHeight
+    proj.edges.forEach(e => {
+      g.setEdge(e.sourceId, e.targetId)
+    })
 
-      // Sync region geometry to backend
-      api.updateRegion(proj.id, region.id, { x: rx, y: ry, w: regionWidth, h: computedHeight }).catch(() => {})
+    dagre.layout(g)
 
-      // Position nodes inside this region
-      regionNodes.forEach((node, nIdx) => {
-        const nx = rx + (regionWidth - nodeWidth) / 2
-        const ny = ry + headerHeight + nIdx * (nodeHeight + nodeGap)
-        node.x = nx
-        node.y = ny
-        api.updateNode(proj.id, node.id, { x: nx, y: ny }).catch(() => {})
-      })
+    nodes.forEach(n => {
+      const dn = g.node(n.id)
+      if (dn) {
+        const fieldCount = n.fields ? n.fields.length : 0
+        const actualHeight = 60 + fieldCount * 22
+        n.x = dn.x - 90
+        n.y = dn.y - actualHeight / 2
+        api.updateNode(proj.id, n.id, { x: n.x, y: n.y }).catch(() => {})
+      }
+    })
+
+    regions.forEach(r => {
+      const dr = g.node(r.id)
+      if (dr) {
+        r.x = dr.x - dr.width / 2 + 10
+        r.y = dr.y - dr.height / 2 - 20
+        r.w = dr.width - 20
+        r.h = dr.height + 20
+        api.updateRegion(proj.id, r.id, { x: r.x, y: r.y, w: Math.max(r.w, 200), h: Math.max(r.h, 160) }).catch(() => {})
+      }
     })
 
     set((s) => ({
@@ -304,6 +338,18 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => ({
       projects: s.projects.map(p =>
         p.id === s.activeProjectId ? { ...p, regions: [...p.regions, region], updatedAt: now() } : p
+      ),
+    }))
+  },
+
+  updateRegion: (id, updates) => {
+    const proj = get().projects.find(p => p.id === get().activeProjectId)
+    if (proj) api.updateRegion(proj.id, id, updates).catch(() => {})
+    set((s) => ({
+      projects: s.projects.map(p =>
+        p.id === s.activeProjectId
+          ? { ...p, regions: p.regions.map(r => r.id === id ? { ...r, ...updates } : r), updatedAt: now() }
+          : p
       ),
     }))
   },

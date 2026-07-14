@@ -1,9 +1,8 @@
 {
   "mcpServers": {
-    "reqflow": {
-      "description": "ReqFlow 需求分析工具 — 管理项目、实体、数据流和区域",
-      "command": "D:\\project\\Workbench\\server\\reqflow-mcp.exe",
-      "args": [],
+    "linkweaver": {
+      "command": "node",
+      "args": ["D:\\project\\Workbench\\server-ts\\dist\\index.js"],
       "env": {
         "REQFLOW_DATA_DIR": "D:\\project\\Workbench\\data"
       }

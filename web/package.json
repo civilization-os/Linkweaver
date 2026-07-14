@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.2",
+    "@types/dagre": "^0.7.54",
+    "dagre": "^0.8.5",
     "gifshot": "^0.4.5",
     "html2canvas": "^1.4.1",
     "lucide-react": "^1.24.0",

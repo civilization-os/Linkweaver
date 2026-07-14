@@ -8,6 +8,17 @@ const BASE_CANVAS_W = 6000
 const BASE_CANVAS_H = 4000
 const GRID_SIZE = 40
 
+function getContrastColor(hexColor: string) {
+  let color = hexColor || '#f0f0f0';
+  if (color.startsWith('#')) color = color.substring(1);
+  if (color.length === 3) color = color.split('').map(c => c + c).join('');
+  const r = parseInt(color.substring(0, 2), 16);
+  const g = parseInt(color.substring(2, 4), 16);
+  const b = parseInt(color.substring(4, 6), 16);
+  const yiq = (((isNaN(r) ? 240 : r) * 299) + ((isNaN(g) ? 240 : g) * 587) + ((isNaN(b) ? 240 : b) * 114)) / 1000;
+  return (yiq >= 140) ? '#18181b' : '#ffffff';
+}
+
 function getNodeRect(node: FlowNode, el: HTMLElement | null) {
   const w = el?.offsetWidth ?? 160
   const h = el?.offsetHeight ?? 80
@@ -127,6 +138,23 @@ export default function Canvas() {
   const activeBusinessFlowId = store.activeBusinessFlowId
   const activeFlow = project?.businessFlows?.find(f => f.id === activeBusinessFlowId)
   const flowAnimationSpeed = store.flowAnimationSpeed
+  const selectedNodeId = store.selectedNodeId
+  const searchQuery = store.searchQuery.toLowerCase()
+
+  const connectedEdgeIds = useMemo(() => {
+    if (!selectedNodeId) return new Set<string>()
+    return new Set(edges.filter(e => e.sourceId === selectedNodeId || e.targetId === selectedNodeId).map(e => e.id))
+  }, [selectedNodeId, edges])
+
+  const connectedNodeIds = useMemo(() => {
+    if (!selectedNodeId) return new Set<string>()
+    const s = new Set<string>([selectedNodeId])
+    edges.forEach(e => {
+      if (e.sourceId === selectedNodeId) s.add(e.targetId)
+      if (e.targetId === selectedNodeId) s.add(e.sourceId)
+    })
+    return s
+  }, [selectedNodeId, edges])
 
   const [pulsingNodeId, setPulsingNodeId] = useState<string | null>(null)
   const [ballPos, setBallPos] = useState<{ x: number; y: number } | null>(null)
@@ -258,7 +286,7 @@ export default function Canvas() {
           ? (edge.targetPort ? portPos(effTo.rect, edge.targetPort) : portPos(effTo.rect, autoPort(effTo.rect, effFrom.rect)))
           : (edge.sourcePort ? portPos(effFrom.rect, edge.sourcePort) : portPos(effFrom.rect, autoPort(effFrom.rect, effTo.rect)))
 
-        let progress = 0
+        
         const duration = flowAnimationSpeed * 0.5 // Flow through edge for 50% of step duration
         const start = performance.now()
 
@@ -395,13 +423,14 @@ export default function Canvas() {
           store.toggleEdgeInBusinessFlow(store.editingBusinessFlowId, edge.id)
           return
         }
-        store.selectEdge(i)
+        store.selectEdge(edge.id)
         return
       }
     }
 
-    // Blank area → deselect edge + start panning
+    // Blank area → deselect edge + node + start panning
     store.selectEdge(null)
+    store.selectNode(null)
     drag.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, ox, oy }
   }, [store, nodes, edges, regions])
 
@@ -520,16 +549,7 @@ export default function Canvas() {
   const [connecting, setConnecting] = useState<{ fromId: string; fromPort: string; mouseX: number; mouseY: number } | null>(null)
   const [newEdgeTarget, setNewEdgeTarget] = useState<{ sourceId: string; targetId: string } | null>(null)
 
-  const tempLineD = (() => {
-    if (!connecting) return null
-    const fromEl = nodeRefs.current.get(connecting.fromId)
-    const fromNode = nodes.find(n => n.id === connecting.fromId)
-    if (fromNode && fromEl) {
-      const { d } = edgePath(portPos(getNodeRect(fromNode, fromEl), connecting.fromPort), { x: connecting.mouseX, y: connecting.mouseY })
-      return d
-    }
-    return null
-  })()
+
 
   const maxNodeX = nodes.reduce((max, n) => Math.max(max, n.x + 400), 0)
   const maxRegionX = regions.reduce((max, r) => Math.max(max, r.x + (r.collapsed ? 220 : r.w) + 400), 0)
@@ -565,14 +585,23 @@ export default function Canvas() {
             const regionWidth = isCollapsed ? 220 : r.w
             const regionHeight = isCollapsed ? 56 : r.h
             const insideNodesCount = nodes.filter(n => n.regionId === r.id).length
-            const isRegionActive = activeFlow ? (
+            const isRegionActive = searchQuery ? (
+              r.title.toLowerCase().includes(searchQuery) ||
+              nodes.filter(n => n.regionId === r.id).some(n => 
+                n.label.toLowerCase().includes(searchQuery) ||
+                (n.sublabel && n.sublabel.toLowerCase().includes(searchQuery)) ||
+                (n.fields && n.fields.some(f => f.name.toLowerCase().includes(searchQuery)))
+              )
+            ) : selectedNodeId ? (
+              nodes.filter(n => n.regionId === r.id).some(n => connectedNodeIds.has(n.id))
+            ) : (activeFlow ? (
               nodes.filter(n => n.regionId === r.id).some(n => activeFlow.nodeIds.includes(n.id))
-            ) : true
+            ) : true)
 
             return (
               <div
                 key={r.id}
-                className={`region absolute rounded-2xl pointer-events-none p-4 flex flex-col transition-all duration-200 z-0 ${
+                className={`region group/region absolute rounded-2xl pointer-events-none p-4 flex flex-col transition-all duration-200 z-0 hover:ring-2 hover:ring-zinc-400/50 hover:shadow-md ${
                   isCollapsed ? 'shadow-sm border-double border-4' : 'shadow-none'
                 }`}
                 data-region={r.id}
@@ -590,17 +619,21 @@ export default function Canvas() {
               >
                 <div className="region-header absolute top-0 left-0 right-0 h-9 rounded-t-2xl cursor-move pointer-events-auto hover:bg-zinc-950/[0.02] transition-colors" />
                 
-                <div className="region-title absolute top-3 left-4 text-[10px] font-bold text-zinc-500 uppercase tracking-wider select-none pointer-events-none flex flex-col">
+                <div 
+                  className="region-title absolute top-3 left-4 text-[10px] font-bold uppercase tracking-wider select-none pointer-events-none flex flex-col transition-colors"
+                  style={{ color: getContrastColor(r.color) }}
+                >
                   <span>{r.title}</span>
                   {isCollapsed && (
-                    <span className="text-[8px] text-zinc-400 font-normal lowercase tracking-normal normal-case mt-0.5">
+                    <span className="text-[8px] font-normal lowercase tracking-normal normal-case mt-0.5 opacity-80">
                       ({insideNodesCount} 个节点)
                     </span>
                   )}
                 </div>
 
                 <button
-                  className="absolute top-2 right-4 flex items-center justify-center w-5 h-5 rounded hover:bg-zinc-900/5 text-zinc-400 hover:text-zinc-700 cursor-pointer pointer-events-auto transition-colors"
+                  className="absolute top-2 right-4 flex items-center justify-center w-5 h-5 rounded hover:bg-zinc-900/10 cursor-pointer pointer-events-auto transition-colors"
+                  style={{ color: getContrastColor(r.color), opacity: 0.8 }}
                   onClick={(e) => {
                     e.stopPropagation()
                     store.toggleRegionCollapse(r.id)
@@ -655,12 +688,18 @@ export default function Canvas() {
               const p1 = edge.sourcePort ? portPos(effFrom.rect, edge.sourcePort) : portPos(effFrom.rect, autoPort(effFrom.rect, effTo.rect))
               const p2 = edge.targetPort ? portPos(effTo.rect, edge.targetPort) : portPos(effTo.rect, autoPort(effTo.rect, effFrom.rect))
               const { d } = edgePath(p1, p2)
-              const isSel = store.selectedEdgeIdx === idx
+              const isSel = store.selectedEdgeId === edge.id
               
               const inFlow = activeFlow ? activeFlow.edgeIds.includes(edge.id) : false
+              const isEdgeActive = searchQuery ? (
+                edge.label.toLowerCase().includes(searchQuery) || 
+                nodes.find(n => n.id === edge.sourceId)?.label.toLowerCase().includes(searchQuery) ||
+                nodes.find(n => n.id === edge.targetId)?.label.toLowerCase().includes(searchQuery)
+              ) : selectedNodeId ? connectedEdgeIds.has(edge.id) : (activeFlow ? inFlow : true)
+              const edgeOpacity = isEdgeActive ? (store.editingBusinessFlowId && !inFlow ? 0.3 : 1) : 0.15
               const strokeColor = activeFlow ? (inFlow ? '#4f46e5' : '#e4e4e7') : (isSel ? '#18181b' : '#d4d4d8')
               const strokeWidth = activeFlow ? (inFlow ? '2.5' : '1') : (isSel ? '2' : '1.5')
-              const opacity = activeFlow ? (inFlow ? 1 : 0.15) : 1
+              const opacity = activeFlow ? (inFlow ? 1 : 0.15) : edgeOpacity
 
               let markerSuffix = ''
               if (activeFlow) {
@@ -674,7 +713,9 @@ export default function Canvas() {
               else { markerStart = `url(#arr-r${markerSuffix})`; markerEnd = `url(#arr-f${markerSuffix})` }
 
               return (
-                <g key={edge.id} style={{ opacity, transition: 'opacity 0.2s' }}>
+                <g key={edge.id} style={{ opacity, transition: 'opacity 0.2s' }} className="group/edge cursor-pointer hover:drop-shadow-sm">
+                  {/* Invisible thicker path for easier hovering */}
+                  <path d={d} fill="none" stroke="transparent" strokeWidth="12" className="pointer-events-auto" />
                   <path
                     d={d}
                     fill="none"
@@ -683,6 +724,7 @@ export default function Canvas() {
                     strokeLinecap="round"
                     markerStart={markerStart}
                     markerEnd={markerEnd}
+                    className="group-hover/edge:stroke-indigo-500 group-hover/edge:stroke-[3px] transition-all pointer-events-auto"
                   />
                   {store.flowAnimation && (!activeFlow || inFlow) && (
                     <>
@@ -774,7 +816,10 @@ export default function Canvas() {
 
             return labelPositions.map((pos) => {
               const inFlow = activeFlow ? activeFlow.edgeIds.includes(pos.id) : false
-              const labelOpacity = activeFlow ? (inFlow ? 1 : 0.15) : 1
+              const isLabelActive = searchQuery ? (
+                pos.label.toLowerCase().includes(searchQuery)
+              ) : selectedNodeId ? connectedEdgeIds.has(pos.id) : (activeFlow ? inFlow : true)
+              const labelOpacity = isLabelActive ? 1 : 0.15
               return (
                 <div
                   key={`lbl-${pos.id}`}
@@ -797,7 +842,11 @@ export default function Canvas() {
             const r = regions.find(reg => reg.id === node.regionId)
             return !r?.collapsed
           }).map(node => {
-            const isNodeActive = activeFlow ? activeFlow.nodeIds.includes(node.id) : true
+            const isNodeActive = searchQuery ? (
+              node.label.toLowerCase().includes(searchQuery) ||
+              (node.sublabel && node.sublabel.toLowerCase().includes(searchQuery)) ||
+              (node.fields && node.fields.some(f => f.name.toLowerCase().includes(searchQuery)))
+            ) : selectedNodeId ? connectedNodeIds.has(node.id) : (activeFlow ? activeFlow.nodeIds.includes(node.id) : true)
             const isNodeInEditMode = store.editingBusinessFlowId ? (
               activeFlow?.nodeIds.includes(node.id)
             ) : false
@@ -805,10 +854,11 @@ export default function Canvas() {
               <div
                 key={node.id}
                 ref={(el) => { if (el) nodeRefs.current.set(node.id, el) }}
-                className={`node-el absolute z-20 cursor-move bg-white border transition-all duration-200 rounded-xl p-3.5 min-w-40 flex flex-col group/node ${
-                  activeFlow ? (
-                    isNodeActive ? 'ring-2 ring-indigo-500 shadow-md shadow-indigo-100/50 border-indigo-200 z-30' : 'opacity-15 grayscale border-zinc-200 shadow-none'
-                  ) : 'border-zinc-200 shadow-sm hover:shadow-md'
+                onClick={(e) => { e.stopPropagation(); store.selectNode(node.id) }}
+                className={`node-el absolute z-20 cursor-move bg-white border transition-all duration-200 rounded-xl p-3.5 min-w-40 flex flex-col group/node hover:ring-2 hover:ring-indigo-400 hover:shadow-lg hover:-translate-y-0.5 ${
+                  !isNodeActive ? 'opacity-15 grayscale border-zinc-200 shadow-none' : (
+                    activeFlow ? 'ring-2 ring-indigo-500 shadow-md shadow-indigo-100/50 border-indigo-200 z-30' : 'border-zinc-200 shadow-sm'
+                  )
                 } ${
                   store.editingBusinessFlowId ? 'ring-2 border-zinc-300' : ''
                 } ${

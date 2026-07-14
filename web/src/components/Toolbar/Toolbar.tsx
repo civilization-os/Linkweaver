@@ -22,8 +22,7 @@ import {
   Film,
   Download,
   Sparkles,
-  FolderMinus,
-  FolderPlus
+  Search
 } from 'lucide-react'
 
 export default function Toolbar() {
@@ -34,7 +33,7 @@ export default function Toolbar() {
   const toggleFlow = useStore(s => s.toggleFlow)
   const showGrid = useStore(s => s.showGrid)
   const toggleGrid = useStore(s => s.toggleGrid)
-  const selectedEdgeIdx = useStore(s => s.selectedEdgeIdx)
+  const selectedEdgeId = useStore(s => s.selectedEdgeId)
   const project = useStore(s => s.currentProject())
   const resetView = useStore(s => s.resetView)
   const formatCanvas = useStore(s => s.formatCanvas)
@@ -43,6 +42,7 @@ export default function Toolbar() {
   const setViewport = useStore(s => s.setViewport)
   const deleteNode = useStore(s => s.deleteNode)
   const addRegion = useStore(s => s.addRegion)
+  const updateRegion = useStore(s => s.updateRegion)
   const deleteRegion = useStore(s => s.deleteRegion)
   const syncCurrentProject = useStore(s => s.syncCurrentProject)
 
@@ -292,7 +292,7 @@ export default function Toolbar() {
   const edges = project?.edges ?? []
   const regions = project?.regions ?? []
   const allCollapsed = regions.length > 0 && regions.every(r => r.collapsed)
-  const selectedLabel = selectedEdgeIdx !== null ? edges[selectedEdgeIdx]?.label : ''
+  const selectedLabel = selectedEdgeId !== null ? edges.find(e => e.id === selectedEdgeId)?.label : ''
 
   // Unplaced: entities not in any region
   const unplacedNodes = nodes.filter(n => !n.regionId)
@@ -389,6 +389,19 @@ export default function Toolbar() {
           <Maximize2 size={14} />
           <span>重置视图</span>
         </button>
+
+        <div className="w-px h-4 bg-zinc-200 mx-1.5" />
+
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <input 
+            type="text" 
+            placeholder="搜索节点或连线..." 
+            className="pl-8 pr-3 py-1.5 bg-zinc-50 border border-zinc-200/60 rounded-lg text-xs font-semibold text-zinc-700 w-48 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:bg-white transition-all"
+            value={useStore(s => s.searchQuery)}
+            onChange={(e) => useStore.getState().setSearchQuery(e.target.value)}
+          />
+        </div>
 
         <div className="flex items-center gap-0.5 bg-zinc-50 border border-zinc-200/60 rounded-lg p-0.5 ml-1">
           <button
@@ -646,10 +659,18 @@ export default function Toolbar() {
                       className="group flex items-center justify-between px-2 py-1.5 hover:bg-zinc-50 rounded-lg transition-colors"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div
-                          className="w-3 h-3 rounded-full border border-zinc-300 shrink-0"
-                          style={{ backgroundColor: r.color }}
-                        />
+                        <label className="shrink-0 cursor-pointer" title="点击修改颜色">
+                          <input 
+                            type="color" 
+                            className="absolute opacity-0 pointer-events-none w-0 h-0" 
+                            value={r.color || '#f0f0f0'}
+                            onChange={(e) => updateRegion(r.id, { color: e.target.value })}
+                          />
+                          <div
+                            className="w-3 h-3 rounded-full border border-zinc-300 shrink-0 shadow-sm transition-transform hover:scale-110"
+                            style={{ backgroundColor: r.color }}
+                          />
+                        </label>
                         <div className="flex flex-col min-w-0">
                           <span className="text-xs font-semibold text-zinc-800 truncate">{r.title}</span>
                           <span className="text-[10px] text-zinc-400">{count} 个实体</span>
