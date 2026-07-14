@@ -140,6 +140,8 @@ export default function Canvas() {
   const flowAnimationSpeed = store.flowAnimationSpeed
   const selectedNodeId = store.selectedNodeId
   const searchQuery = store.searchQuery.toLowerCase()
+  const activeRequirement = project?.requirements?.find(r => r.id === store.selectedRequirementId)
+  const linkingRequirementId = store.linkingRequirementId
 
   const connectedEdgeIds = useMemo(() => {
     if (!selectedNodeId) return new Set<string>()
@@ -417,6 +419,12 @@ export default function Canvas() {
       const p2 = edge.targetPort ? portPos(rTo, edge.targetPort) : portPos(rTo, autoPort(rTo, rFrom))
       const { cp } = edgePath(p1, p2)
       if (hitTestBezier(p1, p2, cp, cx, cy, 12)) {
+        if (store.linkingRequirementId) {
+          e.stopPropagation()
+          e.preventDefault()
+          store.toggleEdgeInRequirement(store.linkingRequirementId, edge.id)
+          return
+        }
         if (store.editingBusinessFlowId) {
           e.stopPropagation()
           e.preventDefault()
@@ -592,17 +600,31 @@ export default function Canvas() {
                 (n.sublabel && n.sublabel.toLowerCase().includes(searchQuery)) ||
                 (n.fields && n.fields.some(f => f.name.toLowerCase().includes(searchQuery)))
               )
+            ) : activeRequirement ? (
+              (activeRequirement.regionIds || []).includes(r.id)
             ) : selectedNodeId ? (
               nodes.filter(n => n.regionId === r.id).some(n => connectedNodeIds.has(n.id))
             ) : (activeFlow ? (
               nodes.filter(n => n.regionId === r.id).some(n => activeFlow.nodeIds.includes(n.id))
             ) : true)
 
+            const isRegionInLinkMode = linkingRequirementId && activeRequirement ? (
+              (activeRequirement.regionIds || []).includes(r.id)
+            ) : false
+
             return (
               <div
                 key={r.id}
+                onClick={(e) => {
+                  if (linkingRequirementId) {
+                    e.stopPropagation()
+                    store.toggleRegionInRequirement(linkingRequirementId, r.id)
+                  }
+                }}
                 className={`region group/region absolute rounded-2xl pointer-events-none p-4 flex flex-col transition-all duration-200 z-0 hover:ring-2 hover:ring-zinc-400/50 hover:shadow-md ${
                   isCollapsed ? 'shadow-sm border-double border-4' : 'shadow-none'
+                } ${linkingRequirementId ? 'pointer-events-auto cursor-pointer' : ''} ${
+                  isRegionInLinkMode ? 'ring-2 ring-purple-500 bg-purple-50/10' : ''
                 }`}
                 data-region={r.id}
                 style={{
@@ -691,15 +713,16 @@ export default function Canvas() {
               const isSel = store.selectedEdgeId === edge.id
               
               const inFlow = activeFlow ? activeFlow.edgeIds.includes(edge.id) : false
+              const inReq = activeRequirement ? (activeRequirement.edgeIds || []).includes(edge.id) : false
               const isEdgeActive = searchQuery ? (
                 edge.label.toLowerCase().includes(searchQuery) || 
                 nodes.find(n => n.id === edge.sourceId)?.label.toLowerCase().includes(searchQuery) ||
                 nodes.find(n => n.id === edge.targetId)?.label.toLowerCase().includes(searchQuery)
-              ) : selectedNodeId ? connectedEdgeIds.has(edge.id) : (activeFlow ? inFlow : true)
-              const edgeOpacity = isEdgeActive ? (store.editingBusinessFlowId && !inFlow ? 0.3 : 1) : 0.15
-              const strokeColor = activeFlow ? (inFlow ? '#4f46e5' : '#e4e4e7') : (isSel ? '#18181b' : '#d4d4d8')
-              const strokeWidth = activeFlow ? (inFlow ? '2.5' : '1') : (isSel ? '2' : '1.5')
-              const opacity = activeFlow ? (inFlow ? 1 : 0.15) : edgeOpacity
+              ) : activeRequirement ? inReq : selectedNodeId ? connectedEdgeIds.has(edge.id) : (activeFlow ? inFlow : true)
+              const edgeOpacity = isEdgeActive ? (store.editingBusinessFlowId && !inFlow ? 0.3 : linkingRequirementId && !inReq ? 0.3 : 1) : 0.15
+              const strokeColor = activeRequirement ? (inReq ? '#a855f7' : '#e4e4e7') : activeFlow ? (inFlow ? '#4f46e5' : '#e4e4e7') : (isSel ? '#18181b' : '#d4d4d8')
+              const strokeWidth = activeRequirement ? (inReq ? '2.5' : '1') : activeFlow ? (inFlow ? '2.5' : '1') : (isSel ? '2' : '1.5')
+              const opacity = activeRequirement ? (inReq ? 1 : 0.15) : activeFlow ? (inFlow ? 1 : 0.15) : edgeOpacity
 
               let markerSuffix = ''
               if (activeFlow) {
@@ -816,9 +839,10 @@ export default function Canvas() {
 
             return labelPositions.map((pos) => {
               const inFlow = activeFlow ? activeFlow.edgeIds.includes(pos.id) : false
+              const inReq = activeRequirement ? (activeRequirement.edgeIds || []).includes(pos.id) : false
               const isLabelActive = searchQuery ? (
                 pos.label.toLowerCase().includes(searchQuery)
-              ) : selectedNodeId ? connectedEdgeIds.has(pos.id) : (activeFlow ? inFlow : true)
+              ) : activeRequirement ? inReq : selectedNodeId ? connectedEdgeIds.has(pos.id) : (activeFlow ? inFlow : true)
               const labelOpacity = isLabelActive ? 1 : 0.15
               return (
                 <div
@@ -842,26 +866,38 @@ export default function Canvas() {
             const r = regions.find(reg => reg.id === node.regionId)
             return !r?.collapsed
           }).map(node => {
+            const inReq = activeRequirement ? (activeRequirement.nodeIds || []).includes(node.id) : false
             const isNodeActive = searchQuery ? (
               node.label.toLowerCase().includes(searchQuery) ||
               (node.sublabel && node.sublabel.toLowerCase().includes(searchQuery)) ||
               (node.fields && node.fields.some(f => f.name.toLowerCase().includes(searchQuery)))
-            ) : selectedNodeId ? connectedNodeIds.has(node.id) : (activeFlow ? activeFlow.nodeIds.includes(node.id) : true)
+            ) : activeRequirement ? inReq : selectedNodeId ? connectedNodeIds.has(node.id) : (activeFlow ? activeFlow.nodeIds.includes(node.id) : true)
             const isNodeInEditMode = store.editingBusinessFlowId ? (
               activeFlow?.nodeIds.includes(node.id)
+            ) : linkingRequirementId ? (
+              inReq
             ) : false
             return (
               <div
                 key={node.id}
                 ref={(el) => { if (el) nodeRefs.current.set(node.id, el) }}
-                onClick={(e) => { e.stopPropagation(); store.selectNode(node.id) }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (linkingRequirementId) {
+                    store.toggleNodeInRequirement(linkingRequirementId, node.id)
+                    return
+                  }
+                  store.selectNode(node.id)
+                }}
                 className={`node-el absolute z-20 cursor-move bg-white border transition-all duration-200 rounded-xl p-3.5 min-w-40 flex flex-col group/node hover:ring-2 hover:ring-indigo-400 hover:shadow-lg hover:-translate-y-0.5 ${
                   !isNodeActive ? 'opacity-15 grayscale border-zinc-200 shadow-none' : (
+                    activeRequirement ? 'ring-2 ring-purple-500 shadow-md shadow-purple-100/50 border-purple-200 z-30' :
                     activeFlow ? 'ring-2 ring-indigo-500 shadow-md shadow-indigo-100/50 border-indigo-200 z-30' : 'border-zinc-200 shadow-sm'
                   )
                 } ${
-                  store.editingBusinessFlowId ? 'ring-2 border-zinc-300' : ''
+                  (store.editingBusinessFlowId || linkingRequirementId) ? 'ring-2 border-zinc-300' : ''
                 } ${
+                  isNodeInEditMode && linkingRequirementId ? 'ring-purple-500 border-purple-500 bg-purple-50/10' :
                   isNodeInEditMode ? 'ring-indigo-500 border-indigo-500 bg-indigo-50/10' : ''
                 } ${
                   node.id === pulsingNodeId ? 'animate-node-flash shadow-[0_0_25px_rgba(79,70,229,0.8)] border-indigo-500 scale-105 z-40' : ''

@@ -246,6 +246,76 @@ export function setupMcp(server, store) {
                     }
                 },
                 {
+                    name: 'list_requirements',
+                    description: 'List all requirements in a project',
+                    inputSchema: {
+                        type: 'object',
+                        properties: { project_id: { type: 'string' } },
+                        required: ['project_id']
+                    }
+                },
+                {
+                    name: 'get_requirement',
+                    description: 'Get a specific requirement by ID',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            project_id: { type: 'string' },
+                            req_id: { type: 'string' }
+                        },
+                        required: ['project_id', 'req_id']
+                    }
+                },
+                {
+                    name: 'create_requirement',
+                    description: 'Create a requirement. Use description for markdown (images, videos, rich text). Status should be one of: not_started, in_progress, completed',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            project_id: { type: 'string' },
+                            title: { type: 'string' },
+                            description: { type: 'string' },
+                            status: { type: 'string' },
+                            priority: { type: 'string' },
+                            nodeIds: { type: 'array', items: { type: 'string' } },
+                            edgeIds: { type: 'array', items: { type: 'string' } },
+                            regionIds: { type: 'array', items: { type: 'string' } }
+                        },
+                        required: ['project_id', 'title']
+                    }
+                },
+                {
+                    name: 'update_requirement',
+                    description: 'Update a requirement',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            project_id: { type: 'string' },
+                            req_id: { type: 'string' },
+                            title: { type: 'string' },
+                            description: { type: 'string' },
+                            status: { type: 'string' },
+                            priority: { type: 'string' },
+                            nodeIds: { type: 'array', items: { type: 'string' } },
+                            edgeIds: { type: 'array', items: { type: 'string' } },
+                            regionIds: { type: 'array', items: { type: 'string' } }
+                        },
+                        required: ['project_id', 'req_id']
+                    }
+                },
+                {
+                    name: 'delete_requirement',
+                    description: 'Delete a requirement',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            project_id: { type: 'string' },
+                            req_id: { type: 'string' }
+                        },
+                        required: ['project_id', 'req_id']
+                    }
+                },
+                {
                     name: 'list_business_flows',
                     description: 'List all business flows in a project',
                     inputSchema: {
@@ -501,8 +571,62 @@ export function setupMcp(server, store) {
                     return { content: [{ type: 'text', text: `Region updated:\n${JSON.stringify(region, null, 2)}` }] };
                 }
                 case 'delete_region': {
-                    const ok = await store.deleteRegion(args.project_id, args.region_id);
-                    return { content: [{ type: 'text', text: ok ? `Region deleted` : `Region not found` }] };
+                    const success = await store.deleteRegion(args.project_id, args.region_id);
+                    return { content: [{ type: 'text', text: success ? `Region deleted` : `Region not found` }] };
+                }
+                case 'list_requirements': {
+                    const p = await store.getProject(args.project_id);
+                    if (!p)
+                        return { content: [{ type: 'text', text: 'Project not found' }] };
+                    return { content: [{ type: 'text', text: JSON.stringify(p.requirements || [], null, 2) }] };
+                }
+                case 'get_requirement': {
+                    const p = await store.getProject(args.project_id);
+                    if (!p)
+                        return { content: [{ type: 'text', text: 'Project not found' }] };
+                    const req = (p.requirements || []).find(r => r.id === args.req_id);
+                    if (!req)
+                        return { content: [{ type: 'text', text: 'Requirement not found' }] };
+                    return { content: [{ type: 'text', text: JSON.stringify(req, null, 2) }] };
+                }
+                case 'create_requirement': {
+                    const r = await store.addRequirement(args.project_id, {
+                        title: args.title,
+                        description: args.description,
+                        status: args.status,
+                        priority: args.priority,
+                        nodeIds: args.nodeIds,
+                        edgeIds: args.edgeIds,
+                        regionIds: args.regionIds
+                    });
+                    if (!r)
+                        return { content: [{ type: 'text', text: 'Project not found' }] };
+                    return { content: [{ type: 'text', text: `Requirement created:\n${JSON.stringify(r, null, 2)}` }] };
+                }
+                case 'update_requirement': {
+                    const updates = {};
+                    if (args.title)
+                        updates.title = args.title;
+                    if (args.description)
+                        updates.description = args.description;
+                    if (args.status)
+                        updates.status = args.status;
+                    if (args.priority)
+                        updates.priority = args.priority;
+                    if (args.nodeIds)
+                        updates.nodeIds = args.nodeIds;
+                    if (args.edgeIds)
+                        updates.edgeIds = args.edgeIds;
+                    if (args.regionIds)
+                        updates.regionIds = args.regionIds;
+                    const r = await store.updateRequirement(args.project_id, args.req_id, updates);
+                    if (!r)
+                        return { content: [{ type: 'text', text: 'Requirement not found' }] };
+                    return { content: [{ type: 'text', text: `Requirement updated:\n${JSON.stringify(r, null, 2)}` }] };
+                }
+                case 'delete_requirement': {
+                    const ok = await store.deleteRequirement(args.project_id, args.req_id);
+                    return { content: [{ type: 'text', text: ok ? `Requirement deleted` : `Requirement not found` }] };
                 }
                 case 'list_business_flows': {
                     const p = await store.getProject(args.project_id);

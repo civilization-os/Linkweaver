@@ -1,7 +1,7 @@
 {
-  "name": "web",
+  "name": "reqflow-web",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,6 +19,8 @@
     "modern-screenshot": "^4.7.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.3.2",
     "zustand": "^5.0.14"
   },

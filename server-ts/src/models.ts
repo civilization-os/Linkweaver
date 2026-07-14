@@ -51,6 +51,9 @@ export interface Requirement {
   scope?: string[];
   expression?: string;
   category?: string;
+  nodeIds?: string[];
+  edgeIds?: string[];
+  regionIds?: string[];
 }
 
 export interface BusinessFlow {

@@ -4,6 +4,7 @@ import CanvasSidePanel from './components/CanvasSidePanel/CanvasSidePanel'
 import Sidebar from './components/Sidebar/Sidebar'
 import Toolbar from './components/Toolbar/Toolbar'
 import Overview from './components/Overview/Overview'
+import RequirementPanel from './components/RequirementPanel/RequirementPanel'
 import { useStore } from './store/useStore'
 import { ArrowRight, ArrowLeft, ArrowLeftRight, Trash2 } from 'lucide-react'
 
@@ -62,6 +63,8 @@ export default function App() {
           </>
         )}
       </div>
+
+      <RequirementPanel />
 
       {/* Direction & Action Panel for selected edge */}
       {selectedEdge && selectedEdgeId !== null && (

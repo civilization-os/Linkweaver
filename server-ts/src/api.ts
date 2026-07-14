@@ -123,5 +123,24 @@ export function createApiRouter(store: Store) {
     else res.status(404).json({ error: 'not found' });
   });
 
+  // Requirements
+  router.post('/projects/:id/requirements', async (req, res) => {
+    const result = await store.addRequirement(req.params.id, req.body);
+    if (!result) return res.status(404).json({ error: 'project not found' });
+    res.status(201).json(result);
+  });
+
+  router.put('/projects/:id/requirements/:reqId', async (req, res) => {
+    const result = await store.updateRequirement(req.params.id, req.params.reqId, req.body);
+    if (!result) return res.status(404).json({ error: 'not found' });
+    res.json(result);
+  });
+
+  router.delete('/projects/:id/requirements/:reqId', async (req, res) => {
+    const success = await store.deleteRequirement(req.params.id, req.params.reqId);
+    if (success) res.status(204).send();
+    else res.status(404).json({ error: 'not found' });
+  });
+
   return router;
 }

@@ -1,5 +1,5 @@
 import { useStore } from '../../store/useStore'
-import { LayoutGrid, FolderKanban, FileCode } from 'lucide-react'
+import { LayoutGrid, FolderKanban, FileCode, Plus, CircleDashed, Loader2, CheckCircle2 } from 'lucide-react'
 
 export default function Sidebar() {
   const page = useStore(s => s.page)
@@ -7,6 +7,9 @@ export default function Sidebar() {
   const projects = useStore(s => s.projects)
   const activeProjectId = useStore(s => s.activeProjectId)
   const switchProject = useStore(s => s.switchProject)
+  const addRequirement = useStore(s => s.addRequirement)
+  const selectedRequirementId = useStore(s => s.selectedRequirementId)
+  const selectRequirement = useStore(s => s.selectRequirement)
 
   const activeProject = projects.find(p => p.id === activeProjectId)
 
@@ -70,9 +73,58 @@ export default function Sidebar() {
         </div>
       </div>
 
+      {/* Requirements List */}
+      {activeProject && (
+        <div className="mt-8 flex-1 flex flex-col min-h-0">
+          <div className="flex items-center justify-between px-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2.5">
+            <span>需求列表</span>
+            <button 
+              className="hover:text-zinc-900 transition-colors cursor-pointer"
+              onClick={() => addRequirement({ title: '新需求', status: 'not_started' })}
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+          <div className="space-y-1 overflow-y-auto pr-1 flex-1">
+            {(activeProject.requirements || []).length === 0 ? (
+              <div className="text-xs text-zinc-400 py-3 text-center bg-zinc-50/50 border border-dashed border-zinc-200 rounded-xl mx-2">
+                暂无需求
+              </div>
+            ) : (
+              (activeProject.requirements || []).map(req => {
+                const isSelected = selectedRequirementId === req.id
+                let StatusIcon = CircleDashed
+                let statusColor = 'text-zinc-400'
+                if (req.status === 'in_progress') {
+                  StatusIcon = Loader2
+                  statusColor = 'text-blue-500'
+                } else if (req.status === 'completed') {
+                  StatusIcon = CheckCircle2
+                  statusColor = 'text-emerald-500'
+                }
+                return (
+                  <div
+                    key={req.id}
+                    className={`flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-all duration-150 ${
+                      isSelected
+                        ? 'bg-zinc-900 text-zinc-50 shadow-sm'
+                        : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+                    }`}
+                    onClick={() => selectRequirement(req.id)}
+                  >
+                    <StatusIcon size={14} className={isSelected ? 'text-zinc-400' : statusColor} />
+                    <span className="truncate flex-1">{req.title || '未命名需求'}</span>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
       <div className="mt-auto pt-4 border-t border-zinc-200 flex justify-center items-center text-xs text-zinc-300 font-bold tracking-wide">
-        v1.0.0
+        v1.1.0
       </div>
     </div>
   )

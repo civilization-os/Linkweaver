@@ -19,6 +19,8 @@ interface AppState {
   page: 'overview' | 'canvas'
   loading: boolean
   searchQuery: string
+  selectedRequirementId: string | null
+  linkingRequirementId: string | null
   currentProject: () => Project | undefined
 
   init: () => Promise<void>
@@ -61,6 +63,15 @@ interface AppState {
   setEditingBusinessFlow: (id: string | null) => void
   toggleNodeInBusinessFlow: (flowId: string, nodeId: string) => void
   toggleEdgeInBusinessFlow: (flowId: string, edgeId: string) => void
+
+  selectRequirement: (id: string | null) => void
+  setLinkingRequirement: (id: string | null) => void
+  addRequirement: (req: any) => Promise<void>
+  updateRequirement: (id: string, updates: any) => Promise<void>
+  deleteRequirement: (id: string) => Promise<void>
+  toggleNodeInRequirement: (reqId: string, nodeId: string) => void
+  toggleEdgeInRequirement: (reqId: string, edgeId: string) => void
+  toggleRegionInRequirement: (reqId: string, regionId: string) => void
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -77,6 +88,8 @@ export const useStore = create<AppState>((set, get) => ({
   page: 'overview',
   loading: true,
   searchQuery: '',
+  selectedRequirementId: null,
+  linkingRequirementId: null,
 
   currentProject: () => get().projects.find(p => p.id === get().activeProjectId),
 
@@ -489,6 +502,76 @@ export const useStore = create<AppState>((set, get) => ({
         : [...flow.edgeIds, edgeId]
       get().updateBusinessFlow(flowId, { edgeIds })
     }
+  },
+
+  selectRequirement: (id) => set({ selectedRequirementId: id }),
+
+  addRequirement: async (req) => {
+    const p = get().currentProject()
+    if (!p) return
+    try {
+      await api.addRequirement(p.id, req)
+      await get().syncCurrentProject()
+    } catch {}
+  },
+
+  updateRequirement: async (id, updates) => {
+    const p = get().currentProject()
+    if (!p) return
+    try {
+      await api.updateRequirement(p.id, id, updates)
+      await get().syncCurrentProject()
+    } catch {}
+  },
+
+  setLinkingRequirement: (id) => set({ linkingRequirementId: id }),
+
+  toggleNodeInRequirement: (reqId, nodeId) => {
+    const proj = get().projects.find(p => p.id === get().activeProjectId)
+    if (!proj) return
+    const req = (proj.requirements || []).find(r => r.id === reqId)
+    if (req) {
+      const nodeIds = (req.nodeIds || []).includes(nodeId)
+        ? (req.nodeIds || []).filter(id => id !== nodeId)
+        : [...(req.nodeIds || []), nodeId]
+      get().updateRequirement(reqId, { nodeIds })
+    }
+  },
+
+  toggleEdgeInRequirement: (reqId, edgeId) => {
+    const proj = get().projects.find(p => p.id === get().activeProjectId)
+    if (!proj) return
+    const req = (proj.requirements || []).find(r => r.id === reqId)
+    if (req) {
+      const edgeIds = (req.edgeIds || []).includes(edgeId)
+        ? (req.edgeIds || []).filter(id => id !== edgeId)
+        : [...(req.edgeIds || []), edgeId]
+      get().updateRequirement(reqId, { edgeIds })
+    }
+  },
+
+  toggleRegionInRequirement: (reqId, regionId) => {
+    const proj = get().projects.find(p => p.id === get().activeProjectId)
+    if (!proj) return
+    const req = (proj.requirements || []).find(r => r.id === reqId)
+    if (req) {
+      const regionIds = (req.regionIds || []).includes(regionId)
+        ? (req.regionIds || []).filter(id => id !== regionId)
+        : [...(req.regionIds || []), regionId]
+      get().updateRequirement(reqId, { regionIds })
+    }
+  },
+
+  deleteRequirement: async (id) => {
+    const p = get().currentProject()
+    if (!p) return
+    try {
+      await api.deleteRequirement(p.id, id)
+      await get().syncCurrentProject()
+      if (get().selectedRequirementId === id) {
+        set({ selectedRequirementId: null })
+      }
+    } catch {}
   },
 
   syncCurrentProject: async () => {

@@ -55,4 +55,12 @@ export const api = {
     request(`/projects/${projectId}/business-flows/${flowId}`, { method: 'PUT', body: JSON.stringify(updates) }),
   deleteBusinessFlow: (projectId: string, flowId: string) =>
     request(`/projects/${projectId}/business-flows/${flowId}`, { method: 'DELETE' }),
+
+  // Requirements
+  addRequirement: (projectId: string, req: any) =>
+    request(`/projects/${projectId}/requirements`, { method: 'POST', body: JSON.stringify(req) }),
+  updateRequirement: (projectId: string, reqId: string, updates: any) =>
+    request(`/projects/${projectId}/requirements/${reqId}`, { method: 'PUT', body: JSON.stringify(updates) }),
+  deleteRequirement: (projectId: string, reqId: string) =>
+    request(`/projects/${projectId}/requirements/${reqId}`, { method: 'DELETE' }),
 }

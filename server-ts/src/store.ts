@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import lockfile from 'proper-lockfile';
-import { Project, FlowNode, DataFlow, Region, BusinessFlow, Field } from './models.js';
+import { Project, FlowNode, DataFlow, Region, BusinessFlow, Field, Requirement } from './models.js';
 import crypto from 'crypto';
 import dagre from 'dagre';
 
@@ -266,6 +266,75 @@ export class Store {
           node.regionId = undefined;
         }
       }
+      p.updatedAt = now();
+      return { result: true, mutate: true };
+    });
+  }
+
+  // --- Requirements ---
+  async addRequirement(projectId: string, req: Partial<Requirement>): Promise<Requirement | null> {
+    return this.withLock(projects => {
+      const p = projects.find(p => p.id === projectId);
+      if (!p) return { result: null, mutate: false };
+      
+      const newReq: Requirement = {
+        id: generateId('req-'),
+        title: req.title || 'New Requirement',
+        description: req.description || '',
+        type: req.type || 'feature',
+        priority: req.priority || 'medium',
+        status: req.status || 'not_started',
+        criteria: req.criteria || [],
+        scope: req.scope || [],
+        expression: req.expression || '',
+        category: req.category || '',
+        nodeIds: req.nodeIds || [],
+        edgeIds: req.edgeIds || [],
+        regionIds: req.regionIds || []
+      };
+      
+      p.requirements = p.requirements || [];
+      p.requirements.push(newReq);
+      p.updatedAt = now();
+      return { result: newReq, mutate: true };
+    });
+  }
+
+  async updateRequirement(projectId: string, reqId: string, updates: Partial<Requirement>): Promise<Requirement | null> {
+    return this.withLock(projects => {
+      const p = projects.find(p => p.id === projectId);
+      if (!p || !p.requirements) return { result: null, mutate: false };
+      
+      const req = p.requirements.find(r => r.id === reqId);
+      if (!req) return { result: null, mutate: false };
+      
+      if (updates.title !== undefined) req.title = updates.title;
+      if (updates.description !== undefined) req.description = updates.description;
+      if (updates.type !== undefined) req.type = updates.type;
+      if (updates.priority !== undefined) req.priority = updates.priority;
+      if (updates.status !== undefined) req.status = updates.status;
+      if (updates.criteria !== undefined) req.criteria = updates.criteria;
+      if (updates.scope !== undefined) req.scope = updates.scope;
+      if (updates.expression !== undefined) req.expression = updates.expression;
+      if (updates.category !== undefined) req.category = updates.category;
+      if (updates.nodeIds !== undefined) req.nodeIds = updates.nodeIds;
+      if (updates.edgeIds !== undefined) req.edgeIds = updates.edgeIds;
+      if (updates.regionIds !== undefined) req.regionIds = updates.regionIds;
+      
+      p.updatedAt = now();
+      return { result: req, mutate: true };
+    });
+  }
+
+  async deleteRequirement(projectId: string, reqId: string): Promise<boolean> {
+    return this.withLock(projects => {
+      const p = projects.find(p => p.id === projectId);
+      if (!p || !p.requirements) return { result: false, mutate: false };
+      
+      const index = p.requirements.findIndex(r => r.id === reqId);
+      if (index === -1) return { result: false, mutate: false };
+      
+      p.requirements.splice(index, 1);
       p.updatedAt = now();
       return { result: true, mutate: true };
     });
