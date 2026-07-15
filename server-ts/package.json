@@ -3,6 +3,12 @@
   "version": "1.4.2",
   "description": "ReqFlow MCP Server",
   "main": "dist/index.js",
+  "bin": {
+    "reqflow-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "scripts": {
     "build": "rimraf dist && tsc",
