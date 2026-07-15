@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
-import { X, Save, Edit3, Trash2, Eye, CircleDashed, Loader2, CheckCircle2, Copy, Check, Link } from 'lucide-react'
+import { X, Save, Edit3, Trash2, Eye, CircleDashed, Loader2, CheckCircle2, Copy, Check, Link, Maximize2, Minimize2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import 'katex/dist/katex.min.css'
+import { Mermaid } from './Mermaid'
 
 export default function RequirementPanel() {
   const selectedRequirementId = useStore(s => s.selectedRequirementId)
@@ -16,10 +22,12 @@ export default function RequirementPanel() {
   const req = project?.requirements?.find(r => r.id === selectedRequirementId)
 
   const [isEditing, setIsEditing] = useState(false)
+  const [isFocusMode, setIsFocusMode] = useState(false)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState('not_started')
-  const [copied, setCopied] = useState(false)
+  const [copiedMd, setCopiedMd] = useState(false)
+  const [copiedPreview, setCopiedPreview] = useState(false)
 
   // Sync state when requirement changes
   useEffect(() => {
@@ -47,25 +55,69 @@ export default function RequirementPanel() {
     updateRequirement(req.id, { status: newStatus })
   }
 
-  const handleCopy = () => {
+  const handleCopyMd = () => {
     navigator.clipboard.writeText(description)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setCopiedMd(true)
+    setTimeout(() => setCopiedMd(false), 2000)
+  }
+
+  const handleCopyPreview = async () => {
+    const container = document.getElementById('markdown-preview-container')
+    if (container) {
+      try {
+        const html = container.innerHTML
+        const text = container.innerText
+        const blobHtml = new Blob([html], { type: 'text/html' })
+        const blobText = new Blob([text], { type: 'text/plain' })
+        const data = [new ClipboardItem({
+          'text/html': blobHtml,
+          'text/plain': blobText,
+        })]
+        await navigator.clipboard.write(data)
+        setCopiedPreview(true)
+        setTimeout(() => setCopiedPreview(false), 2000)
+      } catch (err) {
+        console.error('Failed to copy rich text: ', err)
+        // Fallback to text if rich text fails
+        navigator.clipboard.writeText(container.innerText)
+        setCopiedPreview(true)
+        setTimeout(() => setCopiedPreview(false), 2000)
+      }
+    }
   }
 
   return (
-    <div className="absolute inset-y-0 right-0 w-[500px] bg-white border-l border-zinc-200 shadow-2xl flex flex-col z-50 animate-in slide-in-from-right-8 duration-200">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-zinc-200/80">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => selectRequirement(null)}
-            className="p-1 text-zinc-400 hover:text-zinc-900 transition-colors rounded-md hover:bg-zinc-100 cursor-pointer"
-          >
-            <X size={18} />
-          </button>
-          <div className="text-sm font-bold text-zinc-800">需求详情</div>
-        </div>
+    <>
+      {isFocusMode && (
+        <div 
+          className="fixed inset-0 bg-zinc-900/20 backdrop-blur-sm z-40 transition-opacity"
+          onClick={() => setIsFocusMode(false)}
+        />
+      )}
+      <div className={`flex flex-col z-50 bg-white transition-all duration-300 ${
+        isFocusMode 
+          ? 'fixed inset-y-8 inset-x-8 md:inset-x-24 lg:inset-x-48 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.15)]' 
+          : 'absolute inset-y-0 right-0 w-[500px] border-l border-zinc-200 shadow-2xl animate-in slide-in-from-right-8'
+      }`}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-zinc-200/80">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => selectRequirement(null)}
+              className="p-1 text-zinc-400 hover:text-zinc-900 transition-colors rounded-md hover:bg-zinc-100 cursor-pointer"
+              title="关闭"
+            >
+              <X size={18} />
+            </button>
+            <button
+              onClick={() => setIsFocusMode(!isFocusMode)}
+              className="p-1 text-zinc-400 hover:text-zinc-900 transition-colors rounded-md hover:bg-zinc-100 cursor-pointer"
+              title={isFocusMode ? "退出专注模式" : "进入专注模式"}
+            >
+              {isFocusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+            <div className="text-sm font-bold text-zinc-800">需求详情</div>
+          </div>
         
         <div className="flex items-center gap-2">
           {/* Status Dropdown / Buttons */}
@@ -159,14 +211,24 @@ export default function RequirementPanel() {
           </div>
           
           {!isEditing && (
-            <button
-              onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-1.5 ml-auto rounded-md bg-zinc-100 hover:bg-zinc-200 text-zinc-600 transition-colors cursor-pointer"
-              title="复制 Markdown"
-            >
-              {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-              <span>{copied ? '已复制' : '复制'}</span>
-            </button>
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                onClick={handleCopyMd}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-100 hover:bg-zinc-200 text-zinc-600 transition-colors cursor-pointer"
+                title="复制原始 Markdown 文本"
+              >
+                {copiedMd ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                <span>{copiedMd ? '已复制' : '复制 Markdown'}</span>
+              </button>
+              <button
+                onClick={handleCopyPreview}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white transition-colors cursor-pointer"
+                title="复制富文本预览内容，可直接粘贴到 Word 或 Notion"
+              >
+                {copiedPreview ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                <span>{copiedPreview ? '已复制' : '复制预览'}</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -190,9 +252,40 @@ export default function RequirementPanel() {
               </div>
             </div>
           ) : (
-            <div className="prose prose-zinc prose-sm max-w-none prose-img:rounded-xl prose-img:border prose-img:border-zinc-200 prose-headings:tracking-tight prose-a:text-blue-600 hover:prose-a:text-blue-500">
+            <div id="markdown-preview-container" className="prose prose-zinc prose-sm max-w-none prose-img:rounded-xl prose-img:border prose-img:border-zinc-200 prose-headings:tracking-tight prose-a:text-blue-600 hover:prose-a:text-blue-500">
               {description ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown 
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                  components={{
+                    code({node, inline, className, children, ...props}: any) {
+                      const match = /language-(\w+)/.exec(className || '')
+                      
+                      if (!inline && match) {
+                        const codeString = String(children).replace(/\n$/, '')
+                        if (match[1] === 'mermaid') {
+                          return <Mermaid chart={codeString} />
+                        }
+                        return (
+                          <SyntaxHighlighter
+                            style={vscDarkPlus as any}
+                            language={match[1]}
+                            PreTag="div"
+                            {...props}
+                          >
+                            {codeString}
+                          </SyntaxHighlighter>
+                        )
+                      }
+                      
+                      return (
+                        <code className={`inline-code ${className || ''}`} {...props}>
+                          {children}
+                        </code>
+                      )
+                    }
+                  }}
+                >
                   {description}
                 </ReactMarkdown>
               ) : (
@@ -203,7 +296,8 @@ export default function RequirementPanel() {
             </div>
           )}
         </div>
+        </div>
       </div>
-    </div>
+    </>
   )
 }

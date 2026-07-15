@@ -2,7 +2,8 @@ import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { useStore } from '../../store/useStore'
 import type { FlowNode } from '../../types'
 import EdgeEditor from '../EdgeEditor/EdgeEditor'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import MiniMap from './MiniMap'
+import { ChevronDown, ChevronUp, Table, User, Cog, Box, Key, Link2 } from 'lucide-react'
 
 const BASE_CANVAS_W = 6000
 const BASE_CANVAS_H = 4000
@@ -35,6 +36,7 @@ function portPos(rect: { x: number; y: number; w: number; h: number }, port: str
   }
 }
 
+
 function autoPort(from: { x: number; y: number; w: number; h: number }, to: { x: number; y: number; w: number; h: number }) {
   const dy = to.y - from.y
   const dx = to.x - from.x
@@ -44,65 +46,145 @@ function autoPort(from: { x: number; y: number; w: number; h: number }, to: { x:
   return dy > 0 ? 'b' : 't'
 }
 
-function edgePath(from: { x: number; y: number }, to: { x: number; y: number }) {
-  const dy = Math.abs(to.y - from.y)
-  const dx = Math.abs(to.x - from.x)
-  if (dx > dy * 1.5) {
-    const cp = Math.max(dx * 0.5, 60)
-    return { d: `M ${from.x} ${from.y} C ${from.x + cp} ${from.y}, ${to.x - cp} ${to.y}, ${to.x} ${to.y}`, cp }
+function getDirVector(dir: string) {
+  switch (dir) {
+    case 't': return { x: 0, y: -1 }
+    case 'b': return { x: 0, y: 1 }
+    case 'l': return { x: -1, y: 0 }
+    case 'r': return { x: 1, y: 0 }
+    default: return { x: 1, y: 0 }
   }
-  const cp = Math.max(dy * 0.5, 60)
-  return { d: `M ${from.x} ${from.y} C ${from.x} ${from.y + cp}, ${to.x} ${to.y - cp}, ${to.x} ${to.y}`, cp }
 }
 
-function cubicBezier(p0: number, p1: number, p2: number, p3: number, t: number) {
-  const u = 1 - t
-  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3
-}
+function orthogonalEdgePath(from: {x: number, y: number}, dirFrom: string, to: {x: number, y: number}, dirTo: string, radius = 15) {
+  const pad = 30
+  const vf = getDirVector(dirFrom)
+  const vt = getDirVector(dirTo)
 
-function getBezierPoint(from: { x: number; y: number }, to: { x: number; y: number }, t: number) {
-  const dy = Math.abs(to.y - from.y)
-  const dx = Math.abs(to.x - from.x)
-  if (dx > dy * 1.5) {
-    const cp = Math.max(dx * 0.5, 60)
-    return {
-      x: cubicBezier(from.x, from.x + cp, to.x - cp, to.x, t),
-      y: cubicBezier(from.y, from.y, to.y, to.y, t)
+  const pt1 = { x: from.x + vf.x * pad, y: from.y + vf.y * pad }
+  const pt2 = { x: to.x + vt.x * pad, y: to.y + vt.y * pad }
+
+  const isHorizSrc = dirFrom === 'l' || dirFrom === 'r'
+  const isHorizTgt = dirTo === 'l' || dirTo === 'r'
+
+  const points = [from, pt1]
+
+  if (isHorizSrc && isHorizTgt) {
+    if ((dirFrom === 'r' && pt1.x < pt2.x) || (dirFrom === 'l' && pt1.x > pt2.x)) {
+      const midX = (pt1.x + pt2.x) / 2
+      points.push({ x: midX, y: pt1.y })
+      points.push({ x: midX, y: pt2.y })
+    } else {
+      const midY = (pt1.y + pt2.y) / 2
+      points.push({ x: pt1.x, y: midY })
+      points.push({ x: pt2.x, y: midY })
+    }
+  } else if (!isHorizSrc && !isHorizTgt) {
+    if ((dirFrom === 'b' && pt1.y < pt2.y) || (dirFrom === 't' && pt1.y > pt2.y)) {
+      const midY = (pt1.y + pt2.y) / 2
+      points.push({ x: pt1.x, y: midY })
+      points.push({ x: pt2.x, y: midY })
+    } else {
+      const midX = (pt1.x + pt2.x) / 2
+      points.push({ x: midX, y: pt1.y })
+      points.push({ x: midX, y: pt2.y })
+    }
+  } else if (isHorizSrc && !isHorizTgt) {
+    const validX = (dirFrom === 'r' && pt1.x < pt2.x) || (dirFrom === 'l' && pt1.x > pt2.x)
+    const validY = (dirTo === 'b' && pt1.y > pt2.y) || (dirTo === 't' && pt1.y < pt2.y)
+    if (validX && validY) {
+      points.push({ x: pt2.x, y: pt1.y })
+    } else {
+      if (!validX) {
+        points.push({ x: pt1.x, y: (pt1.y + pt2.y)/2 })
+        points.push({ x: pt2.x, y: (pt1.y + pt2.y)/2 })
+      } else {
+        points.push({ x: (pt1.x + pt2.x)/2, y: pt1.y })
+        points.push({ x: (pt1.x + pt2.x)/2, y: pt2.y })
+      }
+    }
+  } else {
+    const validY = (dirFrom === 'b' && pt1.y < pt2.y) || (dirFrom === 't' && pt1.y > pt2.y)
+    const validX = (dirTo === 'r' && pt1.x > pt2.x) || (dirTo === 'l' && pt1.x < pt2.x)
+    if (validX && validY) {
+      points.push({ x: pt1.x, y: pt2.y })
+    } else {
+      if (!validY) {
+        points.push({ x: (pt1.x + pt2.x)/2, y: pt1.y })
+        points.push({ x: (pt1.x + pt2.x)/2, y: pt2.y })
+      } else {
+        points.push({ x: pt1.x, y: (pt1.y + pt2.y)/2 })
+        points.push({ x: pt2.x, y: (pt1.y + pt2.y)/2 })
+      }
     }
   }
-  const cp = Math.max(dy * 0.5, 60)
-  return {
-    x: cubicBezier(from.x, from.x, to.x, to.x, t),
-    y: cubicBezier(from.y, from.y + cp, to.y - cp, to.y, t)
+
+  points.push(pt2)
+  points.push(to)
+
+  const cleanPts = [points[0]]
+  for (let i = 1; i < points.length; i++) {
+    const curr = points[i]
+    const prev = cleanPts[cleanPts.length - 1]
+    
+    if (Math.abs(curr.x - prev.x) < 1 && Math.abs(curr.y - prev.y) < 1) continue
+    
+    if (cleanPts.length >= 2) {
+      const prevPrev = cleanPts[cleanPts.length - 2]
+      const isCollinearX = Math.abs(curr.x - prev.x) < 1 && Math.abs(prev.x - prevPrev.x) < 1
+      const isCollinearY = Math.abs(curr.y - prev.y) < 1 && Math.abs(prev.y - prevPrev.y) < 1
+      if (isCollinearX || isCollinearY) {
+        cleanPts.pop()
+      }
+    }
+    cleanPts.push(curr)
   }
-}
 
-function hitTestBezier(from: { x: number; y: number }, to: { x: number; y: number }, cp: number, px: number, py: number, threshold = 10) {
-  const steps = 20
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps
-    const bbx = cubicBezier(from.x, from.x, to.x, to.x, t)
-    const bby = cubicBezier(from.y, from.y + cp, to.y - cp, to.y, t)
-    const dx = px - bbx
-    const dy = py - bby
-    if (dx * dx + dy * dy < threshold * threshold) return true
+  let d = `M ${cleanPts[0].x} ${cleanPts[0].y}`
+  for (let i = 1; i < cleanPts.length - 1; i++) {
+    const pPrev = cleanPts[i - 1]
+    const pCurr = cleanPts[i]
+    const pNext = cleanPts[i + 1]
+
+    const dPrev = Math.hypot(pCurr.x - pPrev.x, pCurr.y - pPrev.y)
+    const dNext = Math.hypot(pNext.x - pCurr.x, pNext.y - pCurr.y)
+
+    const r = Math.min(radius, dPrev / 2, dNext / 2)
+
+    const vPrev = { x: (pPrev.x - pCurr.x) / dPrev, y: (pPrev.y - pCurr.y) / dPrev }
+    const vNext = { x: (pNext.x - pCurr.x) / dNext, y: (pNext.y - pCurr.y) / dNext }
+
+    const arcStart = { x: pCurr.x + vPrev.x * r, y: pCurr.y + vPrev.y * r }
+    const arcEnd = { x: pCurr.x + vNext.x * r, y: pCurr.y + vNext.y * r }
+
+    d += ` L ${arcStart.x} ${arcStart.y}`
+    d += ` Q ${pCurr.x} ${pCurr.y}, ${arcEnd.x} ${arcEnd.y}`
   }
-  return false
+
+  const lastP = cleanPts[cleanPts.length - 1]
+  d += ` L ${lastP.x} ${lastP.y}`
+
+  return { d, points: cleanPts }
 }
 
-function Grid({ width, height }: { width: number; height: number }) {
-  const xLines: number[] = []
-  for (let x = 0; x <= width; x += GRID_SIZE) xLines.push(x)
-  const yLines: number[] = []
-  for (let y = 0; y <= height; y += GRID_SIZE) yLines.push(y)
-
-  return (
-    <svg className="grid-layer absolute top-0 left-0 pointer-events-none opacity-30" viewBox={`0 0 ${width} ${height}`} style={{ width, height }}>
-      {xLines.map((x) => <line key={`x-${x}`} x1={x} y1={0} x2={x} y2={height} />)}
-      {yLines.map((y) => <line key={`y-${y}`} x1={0} y1={y} x2={width} y2={y} />)}
-    </svg>
-  )
+function hitTestLineSegment(p1: {x:number,y:number}, p2: {x:number,y:number}, px: number, py: number, threshold = 10) {
+  const l2 = (p1.x - p2.x)**2 + (p1.y - p2.y)**2;
+  if (l2 === 0) return Math.hypot(px - p1.x, py - p1.y) < threshold;
+  let t = ((px - p1.x) * (p2.x - p1.x) + (py - p1.y) * (p2.y - p1.y)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  const projX = p1.x + t * (p2.x - p1.x);
+  const projY = p1.y + t * (p2.y - p1.y);
+  return Math.hypot(px - projX, py - projY) < threshold;
 }
+
+function hitTestPath(points: {x:number, y:number}[], px: number, py: number, threshold = 12) {
+  for (let i = 0; i < points.length - 1; i++) {
+    if (hitTestLineSegment(points[i], points[i+1], px, py, threshold)) return true;
+  }
+  return false;
+}
+
+// Grid is now rendered via CSS on the container
 
 export default function Canvas() {
   const store = useStore()
@@ -131,22 +213,104 @@ export default function Canvas() {
     const el = nodeRefs.current.get(node.id) ?? null
     return {
       id: node.id,
-      rect: getNodeRect(node, el)
+      rect: { x: node.x, y: node.y, w: el?.offsetWidth ?? 160, h: el?.offsetHeight ?? 80 }
     }
   }, [nodes, regions])
 
   const activeBusinessFlowId = store.activeBusinessFlowId
   const activeFlow = project?.businessFlows?.find(f => f.id === activeBusinessFlowId)
   const flowAnimationSpeed = store.flowAnimationSpeed
+  const [hoveredFieldInfo, setHoveredFieldInfo] = useState<{ name: string, ref?: string } | null>(null)
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
+  const normalizeFieldName = useCallback((name: string) => name.toLowerCase().replace(/[\s_-]/g, ''), [])
   const selectedNodeId = store.selectedNodeId
   const searchQuery = store.searchQuery.toLowerCase()
   const activeRequirement = project?.requirements?.find(r => r.id === store.selectedRequirementId)
   const linkingRequirementId = store.linkingRequirementId
 
+  const [layoutTick, setLayoutTick] = useState(0)
+  
+  useEffect(() => {
+    let ticking = false
+    const ro = new ResizeObserver(() => {
+      if (!ticking) {
+        ticking = true
+        requestAnimationFrame(() => {
+          setLayoutTick(t => t + 1)
+          ticking = false
+        })
+      }
+    })
+    
+    nodeRefs.current.forEach(el => {
+      if (el) ro.observe(el)
+    })
+    
+    return () => ro.disconnect()
+  }, [nodes])
+
   const connectedEdgeIds = useMemo(() => {
     if (!selectedNodeId) return new Set<string>()
     return new Set(edges.filter(e => e.sourceId === selectedNodeId || e.targetId === selectedNodeId).map(e => e.id))
   }, [selectedNodeId, edges])
+
+  const portLayouts = useMemo(() => {
+    const counts: Record<string, Record<string, number>> = {}
+    
+    edges.forEach(edge => {
+      const effFrom = getEffectiveRectAndId(edge.sourceId)
+      const effTo = getEffectiveRectAndId(edge.targetId)
+      if (!effFrom || !effTo) return
+      
+      const p1Str = edge.sourcePort || autoPort(effFrom.rect, effTo.rect)
+      const p2Str = edge.targetPort || autoPort(effTo.rect, effFrom.rect)
+      
+      if (!counts[effFrom.id]) counts[effFrom.id] = { t: 0, b: 0, l: 0, r: 0 }
+      if (!counts[effTo.id]) counts[effTo.id] = { t: 0, b: 0, l: 0, r: 0 }
+      
+      counts[effFrom.id][p1Str]++
+      counts[effTo.id][p2Str]++
+    })
+    
+    const assigned: Record<string, Record<string, number>> = {}
+    const getSpreadPort = (nodeId: string, rect: any, port: string) => {
+      if (!assigned[nodeId]) assigned[nodeId] = { t: 0, b: 0, l: 0, r: 0 }
+      const idx = assigned[nodeId][port]++
+      const total = counts[nodeId]?.[port] || 1
+      
+      let x, y
+      const padding = 20
+      if (port === 't' || port === 'b') {
+        const step = total > 1 ? (rect.w - 2 * padding) / (total - 1) : 0
+        x = total === 1 ? rect.x + rect.w / 2 : rect.x + padding + step * idx
+        y = port === 't' ? rect.y : rect.y + rect.h
+      } else {
+        const step = total > 1 ? (rect.h - 2 * padding) / (total - 1) : 0
+        y = total === 1 ? rect.y + rect.h / 2 : rect.y + padding + step * idx
+        x = port === 'l' ? rect.x : rect.x + rect.w
+      }
+      return { x, y, dir: port }
+    }
+    
+    const layouts: Record<string, { p1: {x: number, y: number, dir: string}, p2: {x: number, y: number, dir: string}, d: string, points: {x:number, y:number}[] }> = {}
+    edges.forEach(edge => {
+      const effFrom = getEffectiveRectAndId(edge.sourceId)
+      const effTo = getEffectiveRectAndId(edge.targetId)
+      if (!effFrom || !effTo) return
+      
+      if (effFrom.id === effTo.id) return // hide self loop for now
+      
+      const p1Str = edge.sourcePort || autoPort(effFrom.rect, effTo.rect)
+      const p2Str = edge.targetPort || autoPort(effTo.rect, effFrom.rect)
+      
+      const p1 = getSpreadPort(effFrom.id, effFrom.rect, p1Str)
+      const p2 = getSpreadPort(effTo.id, effTo.rect, p2Str)
+      const { d, points } = orthogonalEdgePath(p1, p1.dir, p2, p2.dir, 15)
+      layouts[edge.id] = { p1, p2, d, points }
+    })
+    
+    return layouts
+  }, [edges, getEffectiveRectAndId, layoutTick])
 
   const connectedNodeIds = useMemo(() => {
     if (!selectedNodeId) return new Set<string>()
@@ -407,40 +571,122 @@ export default function Canvas() {
       return
     }
 
-    // Edge hit test
-    for (let i = 0; i < edges.length; i++) {
-      const edge = edges[i]
-      const from = nodes.find(n => n.id === edge.sourceId)
-      const to = nodes.find(n => n.id === edge.targetId)
-      if (!from || !to) continue
-      const rFrom = getNodeRect(from, nodeRefs.current.get(from.id) ?? null)
-      const rTo = getNodeRect(to, nodeRefs.current.get(to.id) ?? null)
-      const p1 = edge.sourcePort ? portPos(rFrom, edge.sourcePort) : portPos(rFrom, autoPort(rFrom, rTo))
-      const p2 = edge.targetPort ? portPos(rTo, edge.targetPort) : portPos(rTo, autoPort(rTo, rFrom))
-      const { cp } = edgePath(p1, p2)
-      if (hitTestBezier(p1, p2, cp, cx, cy, 12)) {
-        if (store.linkingRequirementId) {
-          e.stopPropagation()
-          e.preventDefault()
-          store.toggleEdgeInRequirement(store.linkingRequirementId, edge.id)
+      // Edge hit test
+      for (let i = 0; i < edges.length; i++) {
+        const edge = edges[i]
+        const layout = portLayouts[edge.id]
+        if (!layout) continue
+        
+        if (hitTestPath(layout.points, cx, cy, 12)) {
+          if (store.linkingRequirementId) {
+            e.stopPropagation()
+            e.preventDefault()
+            store.toggleEdgeInRequirement(store.linkingRequirementId, edge.id)
+            return
+          }
+          if (store.editingBusinessFlowId) {
+            e.stopPropagation()
+            e.preventDefault()
+            store.toggleEdgeInBusinessFlow(store.editingBusinessFlowId, edge.id)
+            return
+          }
+          store.selectEdge(edge.id)
           return
         }
-        if (store.editingBusinessFlowId) {
-          e.stopPropagation()
-          e.preventDefault()
-          store.toggleEdgeInBusinessFlow(store.editingBusinessFlowId, edge.id)
-          return
-        }
-        store.selectEdge(edge.id)
-        return
       }
-    }
 
     // Blank area → deselect edge + node + start panning
     store.selectEdge(null)
     store.selectNode(null)
     drag.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, ox, oy }
   }, [store, nodes, edges, regions])
+
+  const rafRef = useRef<number | null>(null)
+  const highlightedRegionRef = useRef<string | null>(null)
+
+  const getImperativeRect = (nodeId: string, dId: string, dKind: string, dNx: number, dNy: number, dDx: number, dDy: number) => {
+    const node = nodes.find(n => n.id === nodeId)
+    if (!node) return null
+    if (node.regionId) {
+      const r = regions.find(reg => reg.id === node.regionId)
+      if (r?.collapsed) {
+        const rx = dKind === 'region' && dId === r.id ? r.x + dDx : r.x
+        const ry = dKind === 'region' && dId === r.id ? r.y + dDy : r.y
+        return { id: `r-${r.id}`, rect: { x: rx, y: ry, w: 220, h: 56 } }
+      }
+    }
+    const el = nodeRefs.current.get(node.id) ?? null
+    let nx = node.x
+    let ny = node.y
+    if (dKind === 'node' && dId === node.id) {
+      nx = dNx
+      ny = dNy
+    } else if (dKind === 'region' && dId === node.regionId) {
+      nx += dDx
+      ny += dDy
+    }
+    return { id: node.id, rect: { x: nx, y: ny, w: el?.offsetWidth ?? 160, h: el?.offsetHeight ?? 80 } }
+  }
+
+  const updateEdgesImperatively = (dId: string, dKind: string, dNx: number, dNy: number, dDx: number, dDy: number) => {
+    const counts: Record<string, Record<string, number>> = {}
+    edges.forEach(edge => {
+      const effFrom = getImperativeRect(edge.sourceId, dId, dKind, dNx, dNy, dDx, dDy)
+      const effTo = getImperativeRect(edge.targetId, dId, dKind, dNx, dNy, dDx, dDy)
+      if (!effFrom || !effTo) return
+      const p1Str = edge.sourcePort || autoPort(effFrom.rect, effTo.rect)
+      const p2Str = edge.targetPort || autoPort(effTo.rect, effFrom.rect)
+      if (!counts[effFrom.id]) counts[effFrom.id] = { t: 0, b: 0, l: 0, r: 0 }
+      if (!counts[effTo.id]) counts[effTo.id] = { t: 0, b: 0, l: 0, r: 0 }
+      counts[effFrom.id][p1Str]++
+      counts[effTo.id][p2Str]++
+    })
+    
+    const assigned: Record<string, Record<string, number>> = {}
+    const getSpreadPort = (nodeId: string, rect: any, port: string) => {
+      if (!assigned[nodeId]) assigned[nodeId] = { t: 0, b: 0, l: 0, r: 0 }
+      const idx = assigned[nodeId][port]++
+      const total = counts[nodeId]?.[port] || 1
+      let x, y
+      const padding = 20
+      if (port === 't' || port === 'b') {
+        const step = total > 1 ? (rect.w - 2 * padding) / (total - 1) : 0
+        x = total === 1 ? rect.x + rect.w / 2 : rect.x + padding + step * idx
+        y = port === 't' ? rect.y : rect.y + rect.h
+      } else {
+        const step = total > 1 ? (rect.h - 2 * padding) / (total - 1) : 0
+        y = total === 1 ? rect.y + rect.h / 2 : rect.y + padding + step * idx
+        x = port === 'l' ? rect.x : rect.x + rect.w
+      }
+      return { x, y, dir: port }
+    }
+
+    edges.forEach(edge => {
+      const effFrom = getImperativeRect(edge.sourceId, dId, dKind, dNx, dNy, dDx, dDy)
+      const effTo = getImperativeRect(edge.targetId, dId, dKind, dNx, dNy, dDx, dDy)
+      if (!effFrom || !effTo || effFrom.id === effTo.id) return
+
+      const p1Str = edge.sourcePort || autoPort(effFrom.rect, effTo.rect)
+      const p2Str = edge.targetPort || autoPort(effTo.rect, effFrom.rect)
+      
+      const p1 = getSpreadPort(effFrom.id, effFrom.rect, p1Str)
+      const p2 = getSpreadPort(effTo.id, effTo.rect, p2Str)
+      
+      const { d: pathData } = orthogonalEdgePath(p1, p1.dir, p2, p2.dir, 15)
+      
+      const edgeG = document.querySelector(`g[data-edge-id="${edge.id}"]`)
+      if (edgeG) {
+        edgeG.querySelectorAll('path').forEach(p => p.setAttribute('d', pathData))
+      }
+      const labelDiv = document.querySelector(`div[data-label-id="${edge.id}"]`) as HTMLElement
+      if (labelDiv) {
+        const mx = (p1.x + p2.x) / 2
+        const my = (p1.y + p2.y) / 2
+        labelDiv.style.left = (mx - (labelDiv.offsetWidth || (edge.label.length * 6 + 16)) / 2) + 'px'
+        labelDiv.style.top = (my - 10) + 'px'
+      }
+    })
+  }
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -453,38 +699,80 @@ export default function Canvas() {
       if (d.kind === 'pan') {
         const l = layerRef.current
         if (l) {
-          l.style.left = (d.ox + e.clientX - d.sx) + 'px'
-          l.style.top = (d.oy + e.clientY - d.sy) + 'px'
-        }
-        return
-      }
-
-      if (d.kind === 'node') {
-        const nx = Math.max(20, d.ox + dx)
-        const ny = Math.max(20, d.oy + dy)
-        store.moveNode(d.id!, nx, ny)
-        // Region highlight
-        document.querySelectorAll('.region-highlight').forEach(el => el.classList.remove('region-highlight', 'ring-2', 'ring-zinc-900', 'ring-offset-2'))
-        const el = nodeRefs.current.get(d.id!)
-        if (el) {
-          const cx2 = nx + (el.offsetWidth || 0) / 2
-          const cy2 = ny + (el.offsetHeight || 0) / 2
-          for (const r of regions) {
-            if (cx2 >= r.x + 16 && cx2 <= r.x + r.w - 16 && cy2 >= r.y + 38 && cy2 <= r.y + r.h - 16) {
-              const regEl = document.querySelector(`.region[data-region="${r.id}"]`)
-              if (regEl) {
-                regEl.classList.add('region-highlight', 'ring-2', 'ring-zinc-900', 'ring-offset-2')
-              }
-              break
-            }
+          const newX = d.ox + e.clientX - d.sx
+          const newY = d.oy + e.clientY - d.sy
+          l.style.left = newX + 'px'
+          l.style.top = newY + 'px'
+          if (viewportRef.current && store.showGrid) {
+            viewportRef.current.style.backgroundPosition = `${newX}px ${newY}px`
           }
         }
         return
       }
 
+      if (d.kind === 'node') {
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(() => {
+          const nx = d.ox + dx
+          const ny = d.oy + dy
+          
+          // Imperative DOM updates
+          const el = nodeRefs.current.get(d.id!)
+          if (el) {
+            el.style.left = nx + 'px'
+            el.style.top = ny + 'px'
+          }
+          updateEdgesImperatively(d.id!, 'node', nx, ny, dx, dy)
+          
+          // Region highlight optimization
+          let foundRegion: string | null = null
+          if (el) {
+            const cx2 = nx + (el.offsetWidth || 0) / 2
+            const cy2 = ny + (el.offsetHeight || 0) / 2
+            for (const r of regions) {
+              if (cx2 >= r.x + 16 && cx2 <= r.x + r.w - 16 && cy2 >= r.y + 38 && cy2 <= r.y + r.h - 16) {
+                foundRegion = r.id
+                break
+              }
+            }
+          }
+          
+          if (highlightedRegionRef.current !== foundRegion) {
+            if (highlightedRegionRef.current) {
+              const oldEl = document.querySelector(`.region[data-region="${highlightedRegionRef.current}"]`)
+              if (oldEl) oldEl.classList.remove('region-highlight', 'ring-2', 'ring-zinc-900', 'ring-offset-2')
+            }
+            if (foundRegion) {
+              const newEl = document.querySelector(`.region[data-region="${foundRegion}"]`)
+              if (newEl) newEl.classList.add('region-highlight', 'ring-2', 'ring-zinc-900', 'ring-offset-2')
+            }
+            highlightedRegionRef.current = foundRegion
+          }
+        })
+        return
+      }
+
       if (d.kind === 'region') {
-        store.moveRegion(d.id!, dx, dy)
-        drag.current = { ...d, ox: d.ox + dx, oy: d.oy + dy, sx: e.clientX, sy: e.clientY }
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(() => {
+          const rx = d.ox + dx
+          const ry = d.oy + dy
+          // Imperative DOM updates for region
+          const regEl = document.querySelector(`.region[data-region="${d.id!}"]`) as HTMLElement
+          if (regEl) {
+            regEl.style.left = rx + 'px'
+            regEl.style.top = ry + 'px'
+          }
+          // Imperative DOM updates for nodes inside region
+          nodes.filter(n => n.regionId === d.id).forEach(n => {
+            const el = nodeRefs.current.get(n.id)
+            if (el) {
+              el.style.left = (n.x + dx) + 'px'
+              el.style.top = (n.y + dy) + 'px'
+            }
+          })
+          updateEdgesImperatively(d.id!, 'region', 0, 0, dx, dy)
+        })
         return
       }
 
@@ -515,24 +803,44 @@ export default function Canvas() {
       const d = drag.current
       if (!d) return
 
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+
       if (d.kind === 'node') {
-        document.querySelectorAll('.region-highlight').forEach(el => el.classList.remove('region-highlight', 'ring-2', 'ring-zinc-900', 'ring-offset-2'))
-        const node = nodes.find(n => n.id === d.id)
-        if (node) {
-          const el = nodeRefs.current.get(d.id!)
-          const cx = node.x + (el?.offsetWidth || 0) / 2
-          const cy = node.y + (el?.offsetHeight || 0) / 2
-          let foundRegion: string | undefined
-          for (const r of regions) {
-            if (cx >= r.x + 16 && cx <= r.x + r.w - 16 && cy >= r.y + 38 && cy <= r.y + r.h - 16) {
-              foundRegion = r.id
-              break
-            }
+        const dx = (e.clientX - d.sx) / store.viewport.scale
+        const dy = (e.clientY - d.sy) / store.viewport.scale
+
+        if (highlightedRegionRef.current) {
+          const oldEl = document.querySelector(`.region[data-region="${highlightedRegionRef.current}"]`)
+          if (oldEl) oldEl.classList.remove('region-highlight', 'ring-2', 'ring-zinc-900', 'ring-offset-2')
+          
+          const node = nodes.find(n => n.id === d.id)
+          if (node && node.regionId !== highlightedRegionRef.current) {
+            store.setNodeRegion(d.id!, highlightedRegionRef.current)
           }
-          if (node.regionId !== foundRegion) {
-            store.setNodeRegion(d.id!, foundRegion)
-          }
+          highlightedRegionRef.current = null
         }
+        // Restore DOM positions because React is about to re-render them anyway based on store state
+        // But store.moveNode will immediately set the right state.
+        store.moveNode(d.id!, d.ox + dx, d.oy + dy)
+        store.syncNodePos(d.id!)
+      }
+
+      if (d.kind === 'region') {
+        const dx = (e.clientX - d.sx) / store.viewport.scale
+        const dy = (e.clientY - d.sy) / store.viewport.scale
+        store.moveRegion(d.id!, dx, dy)
+        store.syncRegionPos(d.id!)
+      }
+
+      if (d.kind === 'resize') {
+        const dx = (e.clientX - d.sx) / store.viewport.scale
+        const dy = (e.clientY - d.sy) / store.viewport.scale
+        const nw = Math.max(d.ox + dx, 200)
+        const nh = Math.max(d.oy + dy, 160)
+        store.resizeRegion(d.id!, nw, nh)
       }
 
       if (d.kind === 'connect') {
@@ -544,6 +852,13 @@ export default function Canvas() {
           }
         }
         setConnecting(null)
+      }
+
+      if (d.kind === 'pan') {
+        const l = layerRef.current
+        if (l) {
+          store.setViewport({ x: l.offsetLeft, y: l.offsetTop })
+        }
       }
 
       drag.current = null
@@ -559,32 +874,33 @@ export default function Canvas() {
 
 
 
-  const maxNodeX = nodes.reduce((max, n) => Math.max(max, n.x + 400), 0)
-  const maxRegionX = regions.reduce((max, r) => Math.max(max, r.x + (r.collapsed ? 220 : r.w) + 400), 0)
-  const canvasW = Math.max(BASE_CANVAS_W, maxNodeX, maxRegionX)
-
-  const maxNodeY = nodes.reduce((max, n) => Math.max(max, n.y + 300), 0)
-  const maxRegionY = regions.reduce((max, r) => Math.max(max, r.y + (r.collapsed ? 56 : r.h) + 300), 0)
-  const canvasH = Math.max(BASE_CANVAS_H, maxNodeY, maxRegionY)
-
-
 
   return (
     <>
-      <div className="flex-1 relative overflow-hidden bg-zinc-50/60" ref={viewportRef}>
+      <div 
+        className="flex-1 relative overflow-hidden bg-zinc-50/60" 
+        ref={viewportRef}
+        style={{
+          ...(store.showGrid ? {
+            backgroundImage: `linear-gradient(to right, #e4e4e7 1px, transparent 1px), linear-gradient(to bottom, #e4e4e7 1px, transparent 1px)`,
+            backgroundSize: `${GRID_SIZE * store.viewport.scale}px ${GRID_SIZE * store.viewport.scale}px`,
+            backgroundPosition: `${store.viewport.x}px ${store.viewport.y}px`,
+          } : {})
+        }}
+        onMouseDown={onLayerMouseDown}
+      >
         <div
           id="canvas-layer"
           className="absolute top-0 left-0 transform-origin-[0_0] select-none"
           ref={layerRef}
           style={{
-            width: canvasW,
-            height: canvasH,
             transform: `scale(${store.viewport.scale})`,
-            transformOrigin: '0 0'
+            transformOrigin: '0 0',
+            left: store.viewport.x,
+            top: store.viewport.y
           }}
-          onMouseDown={onLayerMouseDown}
         >
-          {store.showGrid && <Grid width={canvasW} height={canvasH} />}
+          {/* Grid is handled by CSS on the wrapper div */}
 
           {/* Render Regions */}
           {regions.map(r => {
@@ -612,6 +928,9 @@ export default function Canvas() {
               (activeRequirement.regionIds || []).includes(r.id)
             ) : false
 
+            const rx = r.x
+            const ry = r.y
+
             return (
               <div
                 key={r.id}
@@ -621,15 +940,15 @@ export default function Canvas() {
                     store.toggleRegionInRequirement(linkingRequirementId, r.id)
                   }
                 }}
-                className={`region group/region absolute rounded-2xl pointer-events-none p-4 flex flex-col transition-all duration-200 z-0 hover:ring-2 hover:ring-zinc-400/50 hover:shadow-md ${
+                className={`region group/region absolute rounded-2xl pointer-events-none p-4 flex flex-col transition-colors transition-shadow duration-200 z-0 hover:ring-2 hover:ring-zinc-400/50 hover:shadow-md ${
                   isCollapsed ? 'shadow-sm border-double border-4' : 'shadow-none'
                 } ${linkingRequirementId ? 'pointer-events-auto cursor-pointer' : ''} ${
                   isRegionInLinkMode ? 'ring-2 ring-purple-500 bg-purple-50/10' : ''
                 }`}
                 data-region={r.id}
                 style={{
-                  left: r.x,
-                  top: r.y,
+                  left: rx,
+                  top: ry,
                   width: regionWidth,
                   height: regionHeight,
                   backgroundColor: r.color,
@@ -673,7 +992,7 @@ export default function Canvas() {
           })}
 
           {/* Render Connections SVG */}
-          <svg className="absolute top-0 left-0 z-10 pointer-events-none" style={{ width: canvasW, height: canvasH }}>
+          <svg className="absolute top-0 left-0 z-10 pointer-events-none overflow-visible" style={{ width: 1, height: 1 }}>
             <defs>
               <marker id="arr-f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
                 <path d="M 0 0 L 10 5 L 0 10 Z" fill="#a1a1aa" />
@@ -707,9 +1026,9 @@ export default function Canvas() {
               // If both ends are collapsed into the same region, hide it
               if (effFrom.id === effTo.id) return null
 
-              const p1 = edge.sourcePort ? portPos(effFrom.rect, edge.sourcePort) : portPos(effFrom.rect, autoPort(effFrom.rect, effTo.rect))
-              const p2 = edge.targetPort ? portPos(effTo.rect, edge.targetPort) : portPos(effTo.rect, autoPort(effTo.rect, effFrom.rect))
-              const { d } = edgePath(p1, p2)
+              const layout = portLayouts[edge.id]
+              if (!layout) return null
+              const { d, points } = layout
               const isSel = store.selectedEdgeId === edge.id
               
               const inFlow = activeFlow ? activeFlow.edgeIds.includes(edge.id) : false
@@ -720,58 +1039,90 @@ export default function Canvas() {
                 nodes.find(n => n.id === edge.targetId)?.label.toLowerCase().includes(searchQuery)
               ) : activeRequirement ? inReq : selectedNodeId ? connectedEdgeIds.has(edge.id) : (activeFlow ? inFlow : true)
               const edgeOpacity = isEdgeActive ? (store.editingBusinessFlowId && !inFlow ? 0.3 : linkingRequirementId && !inReq ? 0.3 : 1) : 0.15
-              const strokeColor = activeRequirement ? (inReq ? '#a855f7' : '#e4e4e7') : activeFlow ? (inFlow ? '#4f46e5' : '#e4e4e7') : (isSel ? '#18181b' : '#d4d4d8')
-              const strokeWidth = activeRequirement ? (inReq ? '2.5' : '1') : activeFlow ? (inFlow ? '2.5' : '1') : (isSel ? '2' : '1.5')
-              const opacity = activeRequirement ? (inReq ? 1 : 0.15) : activeFlow ? (inFlow ? 1 : 0.15) : edgeOpacity
-
-              let markerSuffix = ''
-              if (activeFlow) {
-                markerSuffix = inFlow ? '-flow' : '-dim'
-              } else {
-                markerSuffix = isSel ? '-sel' : ''
+              const isHovered = hoveredEdgeId === edge.id
+              
+              let startColor = '#e4e4e7' // zinc-200
+              let endColor = '#71717a'   // zinc-500
+              
+              if (isHovered) {
+                startColor = '#a5b4fc' // indigo-300
+                endColor = '#4338ca'   // indigo-700
+              } else if (activeRequirement) {
+                if (inReq) {
+                  startColor = '#d8b4fe' // purple-300
+                  endColor = '#7e22ce'   // purple-700
+                }
+              } else if (activeFlow) {
+                if (inFlow) {
+                  startColor = '#a5b4fc'
+                  endColor = '#4338ca'
+                }
+              } else if (isSel) {
+                startColor = '#a1a1aa' // zinc-400
+                endColor = '#18181b'   // zinc-900
               }
-              let markerStart = '', markerEnd = ''
-              if (edge.dir === 'fwd') markerEnd = `url(#arr-f${markerSuffix})`
-              else if (edge.dir === 'rev') markerStart = `url(#arr-r${markerSuffix})`
-              else { markerStart = `url(#arr-r${markerSuffix})`; markerEnd = `url(#arr-f${markerSuffix})` }
+
+              const strokeWidth = isHovered ? '3' : activeRequirement ? (inReq ? '2.5' : '1') : activeFlow ? (inFlow ? '2.5' : '1') : (isSel ? '2' : '1.5')
+              const opacity = isHovered ? 1 : activeRequirement ? (inReq ? 1 : 0.15) : activeFlow ? (inFlow ? 1 : 0.15) : edgeOpacity
+
+              let x1 = points[0].x, y1 = points[0].y
+              let x2 = points[points.length - 1].x, y2 = points[points.length - 1].y
+              
+              if (edge.dir === 'rev') {
+                x1 = points[points.length - 1].x
+                y1 = points[points.length - 1].y
+                x2 = points[0].x
+                y2 = points[0].y
+              }
+              
+              const gradId = `grad-${edge.id}-${startColor.replace('#', '')}-${endColor.replace('#', '')}`
 
               return (
-                <g key={edge.id} style={{ opacity, transition: 'opacity 0.2s' }} className="group/edge cursor-pointer hover:drop-shadow-sm">
+                <g 
+                  key={edge.id} 
+                  data-edge-id={edge.id} 
+                  style={{ opacity, transition: 'opacity 0.2s, stroke-width 0.2s' }} 
+                  className="cursor-pointer drop-shadow-sm"
+                  onMouseEnter={() => setHoveredEdgeId(edge.id)}
+                  onMouseLeave={() => setHoveredEdgeId(null)}
+                >
+                  <defs>
+                    <linearGradient id={gradId} gradientUnits="userSpaceOnUse" x1={x1} y1={y1} x2={x2} y2={y2}>
+                      <stop offset="0%" stopColor={edge.dir === 'both' ? endColor : startColor} />
+                      <stop offset="100%" stopColor={endColor} />
+                    </linearGradient>
+                  </defs>
                   {/* Invisible thicker path for easier hovering */}
                   <path d={d} fill="none" stroke="transparent" strokeWidth="12" className="pointer-events-auto" />
                   <path
                     d={d}
                     fill="none"
-                    stroke={strokeColor}
+                    stroke={`url(#${gradId})`}
                     strokeWidth={strokeWidth}
                     strokeLinecap="round"
-                    markerStart={markerStart}
-                    markerEnd={markerEnd}
-                    className="group-hover/edge:stroke-indigo-500 group-hover/edge:stroke-[3px] transition-all pointer-events-auto"
+                    className="transition-colors pointer-events-auto"
                   />
                   {store.flowAnimation && (!activeFlow || inFlow) && (
                     <>
                       <path
                         d={d}
                         fill="none"
-                        stroke={activeFlow ? '#6366f1' : '#18181b'}
-                        strokeWidth="3"
+                        stroke="#ffffff"
+                        strokeWidth="2.5"
                         strokeLinecap="round"
-                        className={`edge-flow ${edge.dir === 'rev' ? 'rev' : 'fwd'}`}
-                      />
-                      <path
-                        d={d}
-                        fill="none"
-                        stroke="#fafafa"
-                        strokeWidth="1"
-                        strokeLinecap="round"
+                        style={{ filter: 'drop-shadow(0 0 3px rgba(255,255,255,0.9))' }}
                         className={`edge-flow ${edge.dir === 'rev' ? 'rev' : 'fwd'}`}
                       />
                       {edge.dir === 'both' && (
-                        <>
-                          <path d={d} fill="none" stroke={activeFlow ? '#6366f1' : '#18181b'} strokeWidth="3" strokeLinecap="round" className="edge-flow rev" />
-                          <path d={d} fill="none" stroke="#fafafa" strokeWidth="1" strokeLinecap="round" className="edge-flow rev" />
-                        </>
+                        <path 
+                          d={d} 
+                          fill="none" 
+                          stroke="#ffffff" 
+                          strokeWidth="2.5" 
+                          strokeLinecap="round" 
+                          style={{ filter: 'drop-shadow(0 0 3px rgba(255,255,255,0.9))' }}
+                          className="edge-flow rev" 
+                        />
                       )}
                     </>
                   )}
@@ -823,7 +1174,7 @@ export default function Canvas() {
               }
             }).filter((item): item is NonNullable<typeof item> => item !== null)
 
-            // Dynamic collision resolution loop
+            // Dynamic collision resolution loop (always on since React only renders at rest)
             for (let i = 0; i < labelPositions.length; i++) {
               for (let j = i + 1; j < labelPositions.length; j++) {
                 const a = labelPositions[i]
@@ -843,16 +1194,22 @@ export default function Canvas() {
               const isLabelActive = searchQuery ? (
                 pos.label.toLowerCase().includes(searchQuery)
               ) : activeRequirement ? inReq : selectedNodeId ? connectedEdgeIds.has(pos.id) : (activeFlow ? inFlow : true)
-              const labelOpacity = isLabelActive ? 1 : 0.15
+              const isHovered = hoveredEdgeId === pos.id
+              const labelOpacity = isHovered ? 1 : (isLabelActive ? 1 : 0.15)
               return (
                 <div
                   key={`lbl-${pos.id}`}
-                  className="absolute z-25 text-[10px] font-semibold text-zinc-500 bg-white border border-zinc-200/50 shadow-sm px-2 py-0.5 rounded pointer-events-none whitespace-nowrap transition-all duration-200"
+                  data-label-id={pos.id}
+                  className={`absolute text-[10px] font-semibold px-2 py-0.5 rounded whitespace-nowrap transition-all duration-200 cursor-pointer pointer-events-auto ${
+                    isHovered ? 'text-indigo-700 bg-indigo-50 border-indigo-300 shadow-md ring-1 ring-indigo-200 z-50' : 'text-zinc-500 bg-white border border-zinc-200/50 shadow-sm z-25'
+                  }`}
                   style={{
                     left: pos.x - pos.width / 2,
                     top: pos.y - pos.height / 2,
                     opacity: labelOpacity
                   }}
+                  onMouseEnter={() => setHoveredEdgeId(pos.id)}
+                  onMouseLeave={() => setHoveredEdgeId(null)}
                 >
                   {pos.label}
                 </div>
@@ -877,6 +1234,9 @@ export default function Canvas() {
             ) : linkingRequirementId ? (
               inReq
             ) : false
+            let nx = node.x
+            let ny = node.y
+
             return (
               <div
                 key={node.id}
@@ -889,7 +1249,7 @@ export default function Canvas() {
                   }
                   store.selectNode(node.id)
                 }}
-                className={`node-el absolute z-20 cursor-move bg-white border transition-all duration-200 rounded-xl p-3.5 min-w-40 flex flex-col group/node hover:ring-2 hover:ring-indigo-400 hover:shadow-lg hover:-translate-y-0.5 ${
+                className={`node-el absolute z-20 cursor-move bg-white border transition-colors transition-shadow duration-200 rounded-xl p-3.5 min-w-40 flex flex-col group/node hover:ring-2 hover:ring-indigo-400 hover:shadow-lg hover:-translate-y-0.5 ${
                   !isNodeActive ? 'opacity-15 grayscale border-zinc-200 shadow-none' : (
                     activeRequirement ? 'ring-2 ring-purple-500 shadow-md shadow-purple-100/50 border-purple-200 z-30' :
                     activeFlow ? 'ring-2 ring-indigo-500 shadow-md shadow-indigo-100/50 border-indigo-200 z-30' : 'border-zinc-200 shadow-sm'
@@ -903,33 +1263,94 @@ export default function Canvas() {
                   node.id === pulsingNodeId ? 'animate-node-flash shadow-[0_0_25px_rgba(79,70,229,0.8)] border-indigo-500 scale-105 z-40' : ''
                 }`}
                 data-node-id={node.id}
-                style={{ left: node.x, top: node.y }}
+                style={{ left: nx, top: ny }}
               >
-              {/* Header */}
-              <div className="flex items-center justify-between pb-1.5 border-b border-zinc-100 mb-2">
-                <span className="text-xs font-bold text-zinc-900 tracking-tight">{node.label}</span>
-                {node.sublabel && (
-                  <span className="text-[9px] bg-zinc-100 text-zinc-500 font-semibold px-1.5 py-0.5 rounded border border-zinc-200/30">
-                    {node.sublabel}
-                  </span>
-                )}
-              </div>
-
-              {/* Fields */}
-              {node.fields && node.fields.length > 0 && (
-                <div className="space-y-1">
-                  {node.fields.map(f => (
-                    <div key={f.name} className="flex items-center justify-between text-[11px] gap-4">
-                      <span className="text-zinc-600 font-medium underline decoration-zinc-200 decoration-1 underline-offset-2">
-                        {f.name}
-                      </span>
-                      <span className="text-zinc-400 font-mono text-[9px]">
-                        {f.type}{f.ref ? `→${f.ref}` : ''}
-                      </span>
+              {/* Header & Fields */}
+              {(() => {
+                const nodeContainsHoveredField = hoveredFieldInfo && node.fields?.some(f => {
+                  const nName = normalizeFieldName(f.name)
+                  const nRef = f.ref ? normalizeFieldName(f.ref) : undefined
+                  return nName === hoveredFieldInfo.name || 
+                         (nRef && nRef === hoveredFieldInfo.name) ||
+                         (hoveredFieldInfo.ref && nName === hoveredFieldInfo.ref) ||
+                         (hoveredFieldInfo.ref && nRef && nRef === hoveredFieldInfo.ref)
+                })
+                return (
+                  <>
+                    <div className={`flex items-center justify-between pb-2 border-b border-zinc-200/80 mb-1 ${
+                      node.collapsedFields && nodeContainsHoveredField ? 'bg-blue-50 rounded-md px-2 -mx-2 ring-1 ring-blue-200 transition-all duration-300' : 'transition-all duration-300'
+                    }`}>
+                      <div className="flex items-center gap-1.5">
+                        {node.type === 'entity' ? <Table size={12} className="text-zinc-400" /> :
+                         node.type === 'actor' ? <User size={12} className="text-zinc-400" /> :
+                         node.type === 'process' ? <Cog size={12} className="text-zinc-400" /> :
+                         <Box size={12} className="text-zinc-400" />}
+                        <span className="text-xs font-bold text-zinc-900 tracking-tight">{node.label}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {node.sublabel && (
+                          <span className="text-[9px] bg-zinc-100 text-zinc-500 font-semibold px-1.5 py-0.5 rounded border border-zinc-200/30">
+                            {node.sublabel}
+                          </span>
+                        )}
+                        {node.fields && node.fields.length > 0 && (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); store.toggleNodeFieldsCollapse(node.id) }}
+                            className="p-0.5 hover:bg-zinc-100 rounded text-zinc-400 hover:text-zinc-600 transition-colors cursor-pointer"
+                            title={node.collapsedFields ? "展开字段" : "折叠字段"}
+                          >
+                            {node.collapsedFields ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
+
+                    {/* Fields */}
+                    {!node.collapsedFields && node.fields && node.fields.length > 0 && (
+                      <div className="flex flex-col rounded-md overflow-hidden border border-zinc-100">
+                        {node.fields.map((f, i) => {
+                          const nName = normalizeFieldName(f.name)
+                          const nRef = f.ref ? normalizeFieldName(f.ref) : undefined
+                          const isHoverMatched = hoveredFieldInfo && (
+                            nName === hoveredFieldInfo.name || 
+                            (nRef && nRef === hoveredFieldInfo.name) ||
+                            (hoveredFieldInfo.ref && nName === hoveredFieldInfo.ref) ||
+                            (hoveredFieldInfo.ref && nRef && nRef === hoveredFieldInfo.ref)
+                          )
+                          return (
+                            <div 
+                              key={f.name} 
+                              onMouseEnter={() => setHoveredFieldInfo({ name: nName, ref: nRef })}
+                              onMouseLeave={() => setHoveredFieldInfo(null)}
+                              className={`flex items-center justify-between text-[11px] gap-4 px-2 py-1 transition-colors cursor-default ${
+                                isHoverMatched ? 'bg-blue-100 text-blue-900 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.3)]' : (i % 2 === 0 ? 'bg-zinc-50/50' : 'bg-white')
+                              }`}
+                              title={`${f.description || ''}${f.default ? `\n默认值: ${f.default}` : ''}`}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                {f.name === 'id' || f.name === '_id' ? (
+                                  <Key size={10} className={isHoverMatched ? "text-blue-600" : "text-amber-500"} />
+                                ) : f.ref ? (
+                                  <Link2 size={10} className={isHoverMatched ? "text-blue-600" : "text-indigo-400"} />
+                                ) : (
+                                  <div className="w-[10px]" />
+                                )}
+                                <span className={`font-medium ${isHoverMatched ? 'text-blue-900' : (f.name === 'id' || f.name === '_id' || f.ref ? 'text-zinc-800' : 'text-zinc-600')}`}>
+                                  {f.name}
+                                </span>
+                                {f.required && <span className={isHoverMatched ? "text-blue-500 text-[10px]" : "text-rose-500 text-[10px]"}>*</span>}
+                              </div>
+                              <span className={`${isHoverMatched ? 'text-blue-700' : 'text-zinc-400'} font-mono text-[9px] text-right truncate max-w-[80px]`} title={f.type}>
+                                {f.type}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
 
               {/* Port Connectors */}
               <div className="port port-t absolute w-2 h-2 rounded-full bg-zinc-300 border border-white top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-crosshair z-30 hover:bg-zinc-900 hover:scale-125 transition-transform duration-100" />
@@ -961,6 +1382,7 @@ export default function Canvas() {
           onClose={() => setNewEdgeTarget(null)}
         />
       )}
+      <MiniMap />
     </>
   )
 }

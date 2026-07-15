@@ -47,6 +47,7 @@ export interface FlowNode {
   x: number
   y: number
   regionId?: string
+  collapsedFields?: boolean
 }
 
 export interface Region {

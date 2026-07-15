@@ -22,7 +22,8 @@ import {
   Film,
   Download,
   Sparkles,
-  Search
+  Search,
+  Expand
 } from 'lucide-react'
 
 export default function Toolbar() {
@@ -45,15 +46,17 @@ export default function Toolbar() {
   const updateRegion = useStore(s => s.updateRegion)
   const deleteRegion = useStore(s => s.deleteRegion)
   const syncCurrentProject = useStore(s => s.syncCurrentProject)
+  const focusMode = useStore(s => s.focusMode)
+  const setFocusMode = useStore(s => s.setFocusMode)
 
   const [isExportingGIF, setIsExportingGIF] = useState(false)
   const [gifProgress, setGifProgress] = useState(0)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const exportMenuRef = useRef<HTMLDivElement>(null)
+  const [showFormatMenu, setShowFormatMenu] = useState(false)
+  const formatMenuRef = useRef<HTMLDivElement>(null)
 
-  // Bounding box size variables constant with Canvas
-  const CANVAS_W = 6000
-  const CANVAS_H = 4000
+
 
   // Close export menu on outside click
   useEffect(() => {
@@ -66,6 +69,18 @@ export default function Toolbar() {
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
   }, [showExportMenu])
+
+  // Close format menu on outside click
+  useEffect(() => {
+    if (!showFormatMenu) return
+    const onClick = (e: MouseEvent) => {
+      if (formatMenuRef.current && !formatMenuRef.current.contains(e.target as Node)) {
+        setShowFormatMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [showFormatMenu])
 
   const handleExportPNG = async () => {
     console.log('[ReqFlow] handleExportPNG starting...')
@@ -103,10 +118,10 @@ export default function Toolbar() {
     })
 
     const padding = 60
-    const x = Math.max(0, minX - padding)
-    const y = Math.max(0, minY - padding)
-    const width = Math.min(CANVAS_W - x, (maxX - minX) + 2 * padding)
-    const height = Math.min(CANVAS_H - y, (maxY - minY) + 2 * padding)
+    const x = minX - padding
+    const y = minY - padding
+    const width = (maxX - minX) + 2 * padding
+    const height = (maxY - minY) + 2 * padding
     console.log('[ReqFlow] crop box:', { x, y, width, height })
 
     // Hide grid and ports during export
@@ -183,10 +198,10 @@ export default function Toolbar() {
     })
 
     const padding = 60
-    const x = Math.max(0, minX - padding)
-    const y = Math.max(0, minY - padding)
-    const width = Math.min(CANVAS_W - x, (maxX - minX) + 2 * padding)
-    const height = Math.min(CANVAS_H - y, (maxY - minY) + 2 * padding)
+    const x = minX - padding
+    const y = minY - padding
+    const width = (maxX - minX) + 2 * padding
+    const height = (maxY - minY) + 2 * padding
     console.log('[ReqFlow] crop box:', { x, y, width, height })
 
     setIsExportingGIF(true)
@@ -209,7 +224,21 @@ export default function Toolbar() {
       const delay = 100
 
       console.log('[ReqFlow] starting frame capture loop...')
+      const edgePaths = layer.querySelectorAll('.edge-flow') as NodeListOf<SVGElement>
+
       for (let i = 0; i < frameCount; i++) {
+        const progress = i / frameCount
+        
+        // Manually step CSS animations since domToBlob restarts them every clone
+        edgePaths.forEach(path => {
+          path.style.animation = 'none'
+          if (path.classList.contains('fwd')) {
+            path.style.strokeDashoffset = String(20 - (20 * progress))
+          } else if (path.classList.contains('rev')) {
+            path.style.strokeDashoffset = String(20 * progress)
+          }
+        })
+
         // We can capture as base64 and convert them to GIF directly, since gifshot supports base64 frames
         const blob = await domToBlob(layer, {
           width,
@@ -235,6 +264,12 @@ export default function Toolbar() {
         console.log(`[ReqFlow] captured frame ${i + 1}/${frameCount}`)
         await new Promise(r => setTimeout(r, delay))
       }
+
+      // Restore CSS animations
+      edgePaths.forEach(path => {
+        path.style.animation = ''
+        path.style.strokeDashoffset = ''
+      })
 
       if (!wasAnimOn) {
         useStore.getState().toggleFlow()
@@ -423,12 +458,50 @@ export default function Toolbar() {
           </button>
         </div>
 
+        <div className="relative" ref={formatMenuRef}>
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 transition-all duration-150 cursor-pointer"
+            onClick={() => setShowFormatMenu(!showFormatMenu)}
+          >
+            <Sparkles size={14} />
+            <span>格式化</span>
+          </button>
+          
+          {showFormatMenu && (
+            <div className="absolute right-0 top-[38px] z-50 w-32 bg-white border border-zinc-200 rounded-xl shadow-xl flex flex-col p-1.5 gap-1 animate-in fade-in slide-in-from-top-2 duration-150">
+              <button
+                className="flex items-center gap-2 px-2.5 py-2 hover:bg-zinc-100/80 rounded-lg text-xs font-bold text-zinc-800 hover:text-zinc-950 transition-colors cursor-pointer text-left w-full group"
+                onClick={() => {
+                  setShowFormatMenu(false)
+                  formatCanvas('default')
+                }}
+              >
+                <span>默认排版</span>
+              </button>
+              <button
+                className="flex items-center gap-2 px-2.5 py-2 hover:bg-zinc-100/80 rounded-lg text-xs font-bold text-zinc-800 hover:text-zinc-950 transition-colors cursor-pointer text-left w-full group"
+                onClick={() => {
+                  setShowFormatMenu(false)
+                  formatCanvas('rectangle')
+                }}
+              >
+                <span>长方形模式</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         <button
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 transition-all duration-150 cursor-pointer"
-          onClick={formatCanvas}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer ${
+            focusMode
+              ? 'bg-zinc-900 text-white shadow-sm hover:bg-zinc-800'
+              : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
+          }`}
+          onClick={() => setFocusMode(!focusMode)}
+          title="专注模式"
         >
-          <Sparkles size={14} />
-          <span>格式化</span>
+          <Expand size={14} />
+          <span>专注模式</span>
         </button>
 
         <div className="flex items-center gap-2 select-none px-1.5" title={allCollapsed ? "展开所有服务区域" : "折叠所有服务区域"}>

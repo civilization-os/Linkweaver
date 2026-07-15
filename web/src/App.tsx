@@ -12,6 +12,7 @@ export default function App() {
   const page = useStore(s => s.page)
   const loading = useStore(s => s.loading)
   const init = useStore(s => s.init)
+  const focusMode = useStore(s => s.focusMode)
   const selectedEdgeId = useStore(s => s.selectedEdgeId)
   const project = useStore(s => s.currentProject())
   const setEdgeDir = useStore(s => s.setEdgeDir)
@@ -44,7 +45,7 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white font-sans text-zinc-950">
       {/* Sidebar Navigation */}
-      <Sidebar />
+      {!focusMode && <Sidebar />}
 
       {/* Main Workspace Area */}
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
@@ -58,13 +59,13 @@ export default function App() {
             {/* Canvas Area with its side panel */}
             <div className="flex-1 flex min-h-0 relative">
               <Canvas />
-              <CanvasSidePanel />
+              {!focusMode && <CanvasSidePanel />}
             </div>
           </>
         )}
       </div>
 
-      <RequirementPanel />
+      {!focusMode && <RequirementPanel />}
 
       {/* Direction & Action Panel for selected edge */}
       {selectedEdge && selectedEdgeId !== null && (

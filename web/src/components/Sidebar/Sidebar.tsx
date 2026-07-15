@@ -124,7 +124,7 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="mt-auto pt-4 border-t border-zinc-200 flex justify-center items-center text-xs text-zinc-300 font-bold tracking-wide">
-        v1.1.0
+        v{__APP_VERSION__}
       </div>
     </div>
   )

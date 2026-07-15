@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @theme {
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -17,17 +18,17 @@ html, body, #root {
 
 /* Flow line animations for Canvas edges */
 @keyframes flow-fwd {
-  from { stroke-dashoffset: 20; }
+  from { stroke-dashoffset: 36; }
   to { stroke-dashoffset: 0; }
 }
 @keyframes flow-rev {
   from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: 20; }
+  to { stroke-dashoffset: 36; }
 }
 
 .edge-flow {
-  stroke-dasharray: 10 10;
-  opacity: 1;
+  stroke-dasharray: 6 30; /* 6px dash, 30px gap */
+  opacity: 0.95;
   pointer-events: none;
 }
 .edge-flow.fwd {
@@ -45,4 +46,17 @@ html, body, #root {
   height: 100vh;
   font-size: 0.875rem;
   color: #71717a; /* zinc-500 */
+}
+
+/* Fix Tailwind Typography inline code styles */
+.prose code.inline-code {
+  background-color: #f4f4f5; /* zinc-100 */
+  color: #e11d48; /* rose-600 */
+  padding: 0.2em 0.4em;
+  border-radius: 0.375rem;
+  font-weight: 500;
+}
+.prose code.inline-code::before,
+.prose code.inline-code::after {
+  content: none !important;
 }

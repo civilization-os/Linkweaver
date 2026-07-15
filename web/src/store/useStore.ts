@@ -21,11 +21,13 @@ interface AppState {
   searchQuery: string
   selectedRequirementId: string | null
   linkingRequirementId: string | null
+  focusMode: boolean
   currentProject: () => Project | undefined
 
   init: () => Promise<void>
   setSearchQuery: (q: string) => void
   setPage: (page: 'overview' | 'canvas') => void
+  setFocusMode: (focus: boolean) => void
   selectNode: (id: string | null) => void
   addProject: (name: string) => Promise<void>
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>
@@ -44,16 +46,19 @@ interface AppState {
   setFlowAnimationSpeed: (speed: number) => void
   toggleGrid: () => void
   moveRegion: (id: string, dx: number, dy: number) => void
+  syncNodePos: (id: string) => void
+  syncRegionPos: (id: string) => void
   resizeRegion: (id: string, w: number, h: number) => void
   addRegion: (region: Region) => void
   updateRegion: (id: string, updates: Partial<Region>) => void
   deleteNode: (id: string) => void
   deleteRegion: (id: string) => void
+  toggleNodeFieldsCollapse: (id: string) => void
   toggleRegionCollapse: (id: string) => void
   toggleAllRegionsCollapse: (collapsed: boolean) => void
   resetView: () => void
   syncCurrentProject: () => Promise<void>
-  formatCanvas: () => Promise<void>
+  formatCanvas: (mode?: 'default' | 'rectangle') => Promise<void>
   activeBusinessFlowId: string | null
   selectBusinessFlow: (id: string | null) => void
   addBusinessFlow: (flow: Omit<BusinessFlow, 'id'>) => void
@@ -90,10 +95,12 @@ export const useStore = create<AppState>((set, get) => ({
   searchQuery: '',
   selectedRequirementId: null,
   linkingRequirementId: null,
+  focusMode: false,
 
   currentProject: () => get().projects.find(p => p.id === get().activeProjectId),
 
   setSearchQuery: (q) => set({ searchQuery: q }),
+  setFocusMode: (focus) => set({ focusMode: focus }),
 
   init: async () => {
     try {
@@ -151,13 +158,20 @@ export const useStore = create<AppState>((set, get) => ({
   setViewport: (vp) => set((s) => ({ viewport: { ...s.viewport, ...vp } })),
 
   moveNode: (id, x, y) => {
-    const proj = get().projects.find(p => p.id === get().activeProjectId)
-    if (proj) api.updateNode(proj.id, id, { x, y }).catch(() => {})
     set((s) => ({
       projects: s.projects.map(p =>
         p.id === s.activeProjectId ? { ...p, nodes: p.nodes.map(n => n.id === id ? { ...n, x, y } : n), updatedAt: now() } : p
       ),
     }))
+  },
+
+  syncNodePos: (id) => {
+    const proj = get().projects.find(p => p.id === get().activeProjectId)
+    if (!proj) return
+    const node = proj.nodes.find(n => n.id === id)
+    if (node) {
+      api.updateNode(proj.id, id, { x: node.x, y: node.y }).catch(() => {})
+    }
   },
 
   setNodeRegion: (id, regionId) => {
@@ -242,17 +256,10 @@ export const useStore = create<AppState>((set, get) => ({
     if (!proj) return
     const region = proj.regions.find(r => r.id === id)
     if (region) {
-      const rx = Math.max(20, region.x + dx)
-      const ry = Math.max(20, region.y + dy)
+      const rx = region.x + dx
+      const ry = region.y + dy
       const adx = rx - region.x
       const ady = ry - region.y
-
-      api.updateRegion(proj.id, id, { x: rx, y: ry }).catch(() => {})
-      
-      // Sync moved nodes in region to backend using actual delta
-      proj.nodes.filter(n => n.regionId === id).forEach(node => {
-        api.updateNode(proj.id, node.id, { x: node.x + adx, y: node.y + ady }).catch(() => {})
-      })
 
       set((s) => ({
         projects: s.projects.map(p =>
@@ -266,6 +273,18 @@ export const useStore = create<AppState>((set, get) => ({
             : p
         ),
       }))
+    }
+  },
+
+  syncRegionPos: (id) => {
+    const proj = get().projects.find(p => p.id === get().activeProjectId)
+    if (!proj) return
+    const region = proj.regions.find(r => r.id === id)
+    if (region) {
+      api.updateRegion(proj.id, id, { x: region.x, y: region.y }).catch(() => {})
+      proj.nodes.filter(n => n.regionId === id).forEach(node => {
+        api.updateNode(proj.id, node.id, { x: node.x, y: node.y }).catch(() => {})
+      })
     }
   },
 
@@ -284,57 +303,179 @@ export const useStore = create<AppState>((set, get) => ({
     }))
   },
 
-  formatCanvas: async () => {
+  formatCanvas: async (mode = 'default') => {
     const proj = get().projects.find(p => p.id === get().activeProjectId)
     if (!proj) return
 
     const nodes = [...proj.nodes]
     const regions = [...proj.regions]
+    const edges = [...proj.edges]
 
-    const g = new dagre.graphlib.Graph({ compound: true })
-    g.setGraph({ rankdir: 'LR', align: 'UL', nodesep: 80, ranksep: 150, edgesep: 40 })
-    g.setDefaultEdgeLabel(() => ({}))
+    if (mode === 'rectangle') {
+      let totalArea = 0
+      const blocks: Array<{ type: 'region' | 'node'; id: string; width: number; height: number; nodes: Array<{ id: string; x: number; y: number }>; x?: number; y?: number }> = []
+      
+      // Process Regions
+      regions.forEach(r => {
+        const g = new dagre.graphlib.Graph()
+        g.setGraph({ rankdir: 'LR', align: 'UL', nodesep: 80, ranksep: 100, edgesep: 40 })
+        g.setDefaultEdgeLabel(() => ({}))
+        const regionNodes = nodes.filter(n => n.regionId === r.id)
+        
+        if (regionNodes.length === 0) {
+          blocks.push({ type: 'region', id: r.id, width: 300, height: 200, nodes: [] })
+          totalArea += 300 * 200
+          return
+        }
+        
+        regionNodes.forEach(n => {
+          const fieldCount = n.fields ? n.fields.length : 0
+          const actualHeight = 60 + fieldCount * 22
+          g.setNode(n.id, { width: 180 + 40, height: actualHeight + 40 })
+        })
+        
+        edges.forEach(e => {
+          if (regionNodes.some(n => n.id === e.sourceId) && regionNodes.some(n => n.id === e.targetId)) {
+            g.setEdge(e.sourceId, e.targetId)
+          }
+        })
+        
+        dagre.layout(g)
+        
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        regionNodes.forEach(n => {
+          const dn = g.node(n.id)
+          if (dn) {
+             minX = Math.min(minX, dn.x - dn.width / 2)
+             minY = Math.min(minY, dn.y - dn.height / 2)
+             maxX = Math.max(maxX, dn.x + dn.width / 2)
+             maxY = Math.max(maxY, dn.y + dn.height / 2)
+          }
+        })
+        
+        const width = Math.max(300, maxX - minX + 100)
+        const height = Math.max(200, maxY - minY + 120)
+        
+        const placedNodes = regionNodes.map(n => {
+          const dn = g.node(n.id)
+          const fieldCount = n.fields ? n.fields.length : 0
+          const actualHeight = 60 + fieldCount * 22
+          return {
+             id: n.id,
+             x: dn.x - minX + 50 - 90,
+             y: dn.y - minY + 80 - actualHeight / 2
+          }
+        })
+        
+        blocks.push({ type: 'region', id: r.id, width, height, nodes: placedNodes })
+        totalArea += width * height
+      })
 
-    regions.forEach(r => {
-      g.setNode(r.id, {})
-    })
-
-    nodes.forEach(n => {
-      const fieldCount = n.fields ? n.fields.length : 0
-      const actualHeight = 60 + fieldCount * 22
-      g.setNode(n.id, { width: 180 + 40, height: actualHeight + 40 }) // Add virtual padding to node size to push apart
-      if (n.regionId) {
-        g.setParent(n.id, n.regionId)
-      }
-    })
-
-    proj.edges.forEach(e => {
-      g.setEdge(e.sourceId, e.targetId)
-    })
-
-    dagre.layout(g)
-
-    nodes.forEach(n => {
-      const dn = g.node(n.id)
-      if (dn) {
+      // Process Unassigned Nodes
+      const unassignedNodes = nodes.filter(n => !n.regionId)
+      unassignedNodes.forEach(n => {
         const fieldCount = n.fields ? n.fields.length : 0
         const actualHeight = 60 + fieldCount * 22
-        n.x = dn.x - 90
-        n.y = dn.y - actualHeight / 2
-        api.updateNode(proj.id, n.id, { x: n.x, y: n.y }).catch(() => {})
-      }
-    })
+        const width = 180 + 40
+        const height = actualHeight + 40
+        blocks.push({ type: 'node', id: n.id, width, height, nodes: [{ id: n.id, x: 20, y: 20 }] })
+        totalArea += width * height
+      })
+      
+      blocks.sort((a, b) => b.height - a.height)
+      
+      const targetWidth = Math.sqrt(totalArea * 1.77) * 1.2
+      let currentX = 100, currentY = 100, rowHeight = 0
+      
+      blocks.forEach(b => {
+        if (currentX + b.width > targetWidth && currentX > 100) {
+          currentX = 100
+          currentY += rowHeight + 100
+          rowHeight = 0
+        }
+        b.x = currentX
+        b.y = currentY
+        currentX += b.width + 100
+        rowHeight = Math.max(rowHeight, b.height)
+      })
+      
+      blocks.forEach(b => {
+        if (b.type === 'region') {
+          const r = regions.find(reg => reg.id === b.id)
+          if (r && b.x !== undefined && b.y !== undefined) {
+            r.x = b.x
+            r.y = b.y
+            r.w = b.width
+            r.h = b.height
+            api.updateRegion(proj.id, r.id, { x: r.x, y: r.y, w: r.w, h: r.h }).catch(() => {})
+          }
+        } else {
+          const n = nodes.find(nd => nd.id === b.id)
+          if (n && b.x !== undefined && b.y !== undefined) {
+            n.x = b.x + b.nodes[0].x
+            n.y = b.y + b.nodes[0].y
+            api.updateNode(proj.id, n.id, { x: n.x, y: n.y }).catch(() => {})
+          }
+        }
+        
+        if (b.type === 'region') {
+          b.nodes.forEach(bn => {
+            const n = nodes.find(nd => nd.id === bn.id)
+            if (n && b.x !== undefined && b.y !== undefined) {
+              n.x = b.x + bn.x
+              n.y = b.y + bn.y
+              api.updateNode(proj.id, n.id, { x: n.x, y: n.y }).catch(() => {})
+            }
+          })
+        }
+      })
+    } else {
+      // Default formatting
+      const g = new dagre.graphlib.Graph({ compound: true })
+      g.setGraph({ rankdir: 'LR', align: 'UL', nodesep: 80, ranksep: 150, edgesep: 40 })
+      g.setDefaultEdgeLabel(() => ({}))
 
-    regions.forEach(r => {
-      const dr = g.node(r.id)
-      if (dr) {
-        r.x = dr.x - dr.width / 2 + 10
-        r.y = dr.y - dr.height / 2 - 20
-        r.w = dr.width - 20
-        r.h = dr.height + 20
-        api.updateRegion(proj.id, r.id, { x: r.x, y: r.y, w: Math.max(r.w, 200), h: Math.max(r.h, 160) }).catch(() => {})
-      }
-    })
+      regions.forEach(r => {
+        g.setNode(r.id, {})
+      })
+
+      nodes.forEach(n => {
+        const fieldCount = n.fields ? n.fields.length : 0
+        const actualHeight = 60 + fieldCount * 22
+        g.setNode(n.id, { width: 180 + 40, height: actualHeight + 40 }) 
+        if (n.regionId) {
+          g.setParent(n.id, n.regionId)
+        }
+      })
+
+      edges.forEach(e => {
+        g.setEdge(e.sourceId, e.targetId)
+      })
+
+      dagre.layout(g)
+
+      nodes.forEach(n => {
+        const dn = g.node(n.id)
+        if (dn) {
+          const fieldCount = n.fields ? n.fields.length : 0
+          const actualHeight = 60 + fieldCount * 22
+          n.x = dn.x - 90
+          n.y = dn.y - actualHeight / 2
+          api.updateNode(proj.id, n.id, { x: n.x, y: n.y }).catch(() => {})
+        }
+      })
+
+      regions.forEach(r => {
+        const dr = g.node(r.id)
+        if (dr) {
+          r.x = dr.x - dr.width / 2 + 10
+          r.y = dr.y - dr.height / 2 - 20
+          r.w = dr.width - 20
+          r.h = dr.height + 20
+          api.updateRegion(proj.id, r.id, { x: r.x, y: r.y, w: Math.max(r.w, 200), h: Math.max(r.h, 160) }).catch(() => {})
+        }
+      })
+    }
 
     set((s) => ({
       projects: s.projects.map(p =>
@@ -459,6 +600,17 @@ export const useStore = create<AppState>((set, get) => ({
       )
     }))
   },
+  toggleNodeFieldsCollapse: (id: string) => set(s => {
+    if (!s.activeProjectId) return s
+    const pIdx = s.projects.findIndex(p => p.id === s.activeProjectId)
+    if (pIdx === -1) return s
+    const newProjects = [...s.projects]
+    newProjects[pIdx] = {
+      ...newProjects[pIdx],
+      nodes: newProjects[pIdx].nodes.map(n => n.id === id ? { ...n, collapsedFields: !n.collapsedFields } : n)
+    }
+    return { projects: newProjects }
+  }),
 
   deleteBusinessFlow: (id) => {
     const proj = get().projects.find(p => p.id === get().activeProjectId)
