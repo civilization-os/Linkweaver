@@ -1,10 +1,10 @@
 {
-  "name": "reqflow-mcp",
+  "name": "linkweaver",
   "version": "1.4.3",
-  "description": "ReqFlow MCP Server",
+  "description": "Linkweaver MCP Server",
   "main": "dist/index.js",
   "bin": {
-    "reqflow-mcp": "dist/index.js"
+    "linkweaver": "dist/index.js"
   },
   "files": [
     "dist"
