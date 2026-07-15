@@ -4,6 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { Store } from './store.js';
 import { createApiRouter } from './api.js';
@@ -32,7 +33,11 @@ async function main() {
   app.use('/api', apiRouter);
 
   // Serve Frontend static files
-  const frontendPath = path.join(__dirname, '../../web/dist');
+  // 优先尝试本地开发目录的 web/dist，如果不存在（例如在 NPM 包中运行），则使用同级打包好的 public 目录
+  let frontendPath = path.join(__dirname, '../../web/dist');
+  if (!fs.existsSync(frontendPath)) {
+    frontendPath = path.join(__dirname, '../public');
+  }
   app.use(express.static(frontendPath));
 
   // Catch-all to serve index.html for React Router (if needed)

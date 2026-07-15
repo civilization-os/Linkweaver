@@ -407,7 +407,19 @@ export function setupMcp(server: Server, store: Store) {
       switch (name) {
         case 'list_projects': {
           const projects = await store.listProjects();
-          return { content: [{ type: 'text', text: JSON.stringify(projects, null, 2) }] };
+          const summaries = projects.map(p => ({
+            id: p.id,
+            name: p.name,
+            version: p.version,
+            description: p.description,
+            createdAt: p.createdAt,
+            updatedAt: p.updatedAt,
+            nodeCount: p.nodes?.length || 0,
+            edgeCount: p.edges?.length || 0,
+            regionCount: p.regions?.length || 0,
+            flowCount: p.businessFlows?.length || 0
+          }));
+          return { content: [{ type: 'text', text: JSON.stringify(summaries, null, 2) }] };
         }
         case 'get_project': {
           const p = await store.getProject(args.project_id as string);

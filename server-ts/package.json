@@ -1,17 +1,20 @@
 {
   "name": "linkweaver",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "description": "Linkweaver MCP Server",
   "main": "dist/index.js",
   "bin": {
     "linkweaver": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "public"
   ],
   "type": "module",
   "scripts": {
-    "build": "rimraf dist && tsc",
+    "build:web": "cd ../web && npm install && npm run build",
+    "copy:web": "rimraf public && node -e \"require('fs').cpSync('../web/dist', 'public', {recursive: true})\"",
+    "build": "npm run build:web && npm run copy:web && rimraf dist && tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts"
   },
