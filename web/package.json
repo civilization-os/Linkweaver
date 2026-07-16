@@ -1,7 +1,7 @@
 {
   "name": "linkweaver-web",
   "private": true,
-  "version": "1.4.5",
+  "version": "1.4.7",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,12 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.2",
     "@types/dagre": "^0.7.54",
     "dagre": "^0.8.5",
     "gifshot": "^0.4.5",
-    "html2canvas": "^1.4.1",
     "lucide-react": "^1.24.0",
     "mermaid": "^11.16.0",
     "modern-screenshot": "^4.7.0",

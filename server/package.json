@@ -1,6 +1,6 @@
 {
   "name": "linkweaver",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "description": "Linkweaver MCP Server",
   "main": "dist/index.js",
   "bin": {

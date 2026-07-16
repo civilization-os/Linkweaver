@@ -17,13 +17,6 @@ export interface Field {
   description?: string
 }
 
-export interface DataEntity {
-  id: string
-  name: string
-  description?: string
-  fields: Field[]
-  tags?: string[]
-}
 
 export interface DataFlow {
   id: string
@@ -109,7 +102,3 @@ export interface ViewportState {
   scale: number
 }
 
-export interface NodePosition {
-  x: number
-  y: number
-}

@@ -1,7 +1,24 @@
 import { useState } from 'react'
 import type { FlowNode, Field } from '../../types'
 import { useStore } from '../../store/useStore'
-import { X, Plus, Trash2 } from 'lucide-react'
+import { X, Plus, Trash2, GripVertical } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors
+} from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 interface Props {
   onClose: () => void
@@ -10,16 +27,137 @@ interface Props {
 
 const FIELD_TYPES = ['string', 'int', 'float', 'bool', 'datetime', 'ref', 'array', 'enum']
 
+type EditField = Field & { _id: string }
+
+function SortableFieldItem({ 
+  f, 
+  i, 
+  handleFieldChange, 
+  handleRemoveField 
+}: { 
+  f: EditField, 
+  i: number, 
+  handleFieldChange: (idx: number, key: keyof Field, value: string | boolean) => void,
+  handleRemoveField: (idx: number) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: f._id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 1,
+  };
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      className={`flex items-center gap-2 bg-zinc-50 p-2 rounded-lg border transition-all ${isDragging ? 'opacity-50 border-indigo-400 shadow-sm' : 'border-zinc-200/50'}`}
+    >
+      <div 
+        {...attributes} 
+        {...listeners} 
+        className="cursor-grab hover:bg-zinc-200 p-0.5 rounded transition-colors text-zinc-400 active:cursor-grabbing outline-none"
+      >
+        <GripVertical size={14} />
+      </div>
+      <input
+        className="w-24 px-2 py-1.5 text-xs bg-white border border-zinc-200 rounded-md outline-none focus:border-zinc-900 transition-all"
+        value={f.name}
+        onChange={e => handleFieldChange(i, 'name', e.target.value)}
+        placeholder="字段名"
+      />
+      <select
+        className="w-20 px-1 py-1.5 text-[11px] bg-white border border-zinc-200 rounded-md outline-none focus:border-zinc-900 transition-all"
+        value={f.type}
+        onChange={e => handleFieldChange(i, 'type', e.target.value)}
+      >
+        {FIELD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+      </select>
+      {f.type === 'ref' && (
+        <select
+          className="w-24 px-1 py-1.5 text-[11px] bg-white border border-zinc-200 rounded-md outline-none focus:border-zinc-900 transition-all"
+          value={f.ref || ''}
+          onChange={e => handleFieldChange(i, 'ref', e.target.value)}
+        >
+          <option value="">选择关联字段</option>
+          {useStore.getState().currentProject()?.nodes.map(n => {
+            if (!n.fields || n.fields.length === 0) return null;
+            return (
+              <optgroup key={n.id} label={n.label}>
+                {n.fields.map(nf => (
+                  <option key={`${n.id}.${nf.name}`} value={`${n.id}.${nf.name}`}>
+                    {nf.name}
+                  </option>
+                ))}
+              </optgroup>
+            )
+          })}
+        </select>
+      )}
+      <input
+        className="flex-1 min-w-0 px-2 py-1.5 text-xs bg-white border border-zinc-200 rounded-md outline-none focus:border-zinc-900 transition-all"
+        value={f.description ?? ''}
+        onChange={e => handleFieldChange(i, 'description', e.target.value)}
+        placeholder="描述（可选）"
+      />
+      <label className="flex items-center gap-1 text-[10px] font-semibold text-zinc-500 whitespace-nowrap cursor-pointer">
+        <input
+          type="checkbox"
+          className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+          checked={!!f.required}
+          onChange={e => handleFieldChange(i, 'required', e.target.checked)}
+        />
+        <span>必填</span>
+      </label>
+      <button
+        className="text-zinc-400 hover:text-red-500 p-1 cursor-pointer transition-colors"
+        onClick={() => handleRemoveField(i)}
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  )
+}
+
 export default function EntityEditor({ onClose, editNode }: Props) {
   const addNode = useStore(s => s.addNode)
+  const updateNode = useStore(s => s.updateNode)
 
   const [name, setName] = useState(editNode?.label ?? '')
   const [type, setType] = useState<'entity' | 'actor' | 'process' | 'nested'>(editNode?.type ?? 'entity')
   const [sublabel] = useState(editNode?.sublabel ?? '实体')
-  const [fields, setFields] = useState<Field[]>(editNode?.fields ?? [])
+  const [fields, setFields] = useState<EditField[]>(
+    (editNode?.fields ?? []).map(f => ({ ...f, _id: Math.random().toString(36).slice(2) }))
+  )
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setFields((items) => {
+        const oldIndex = items.findIndex((item) => item._id === active.id);
+        const newIndex = items.findIndex((item) => item._id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  }
 
   const handleAddField = () => {
-    setFields([...fields, { name: '', type: 'string' }])
+    setFields([...fields, { _id: Math.random().toString(36).slice(2), name: '', type: 'string' }])
   }
 
   const handleRemoveField = (idx: number) => {
@@ -33,16 +171,28 @@ export default function EntityEditor({ onClose, editNode }: Props) {
   const handleSave = () => {
     if (!name.trim()) return
     const labelMap: Record<string, string> = { entity: '实体', actor: '外部', process: '流程', nested: '嵌套' }
-    const node: FlowNode = {
-      id: 'n' + Math.random().toString(36).slice(2, 8),
-      type,
-      label: name.trim(),
-      sublabel: sublabel || labelMap[type],
-      fields: fields.filter(f => f.name.trim()),
-      x: 300 + Math.random() * 200,
-      y: 300 + Math.random() * 200,
+    
+    const finalFields = fields.map(({ _id, ...rest }) => rest).filter(f => f.name.trim())
+
+    if (editNode) {
+      updateNode(editNode.id, {
+        type,
+        label: name.trim(),
+        sublabel: sublabel || labelMap[type],
+        fields: finalFields,
+      })
+    } else {
+      const node: FlowNode = {
+        id: 'n' + Math.random().toString(36).slice(2, 8),
+        type,
+        label: name.trim(),
+        sublabel: sublabel || labelMap[type],
+        fields: finalFields,
+        x: 300 + Math.random() * 200,
+        y: 300 + Math.random() * 200,
+      }
+      addNode(node)
     }
-    addNode(node)
     onClose()
   }
 
@@ -90,44 +240,26 @@ export default function EntityEditor({ onClose, editNode }: Props) {
             <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-3">字段配置</div>
             
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {fields.map((f, i) => (
-                <div key={i} className="flex items-center gap-2 bg-zinc-50 p-2 rounded-lg border border-zinc-200/50">
-                  <input
-                    className="w-24 px-2 py-1.5 text-xs bg-white border border-zinc-200 rounded-md outline-none focus:border-zinc-900 transition-all"
-                    value={f.name}
-                    onChange={e => handleFieldChange(i, 'name', e.target.value)}
-                    placeholder="字段名"
-                  />
-                  <select
-                    className="w-20 px-1 py-1.5 text-[11px] bg-white border border-zinc-200 rounded-md outline-none focus:border-zinc-900 transition-all"
-                    value={f.type}
-                    onChange={e => handleFieldChange(i, 'type', e.target.value)}
-                  >
-                    {FIELD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <input
-                    className="flex-1 min-w-0 px-2 py-1.5 text-xs bg-white border border-zinc-200 rounded-md outline-none focus:border-zinc-900 transition-all"
-                    value={f.description ?? ''}
-                    onChange={e => handleFieldChange(i, 'description', e.target.value)}
-                    placeholder="描述（可选）"
-                  />
-                  <label className="flex items-center gap-1 text-[10px] font-semibold text-zinc-500 whitespace-nowrap cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-                      checked={!!f.required}
-                      onChange={e => handleFieldChange(i, 'required', e.target.checked)}
+              <DndContext 
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext 
+                  items={fields.map(f => f._id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {fields.map((f, i) => (
+                    <SortableFieldItem 
+                      key={f._id} 
+                      f={f} 
+                      i={i} 
+                      handleFieldChange={handleFieldChange} 
+                      handleRemoveField={handleRemoveField} 
                     />
-                    <span>必填</span>
-                  </label>
-                  <button
-                    className="text-zinc-400 hover:text-red-500 p-1 cursor-pointer transition-colors"
-                    onClick={() => handleRemoveField(i)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
+                  ))}
+                </SortableContext>
+              </DndContext>
             </div>
 
             <button
@@ -160,3 +292,4 @@ export default function EntityEditor({ onClose, editNode }: Props) {
     </div>
   )
 }
+

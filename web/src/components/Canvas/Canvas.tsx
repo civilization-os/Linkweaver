@@ -2,8 +2,9 @@ import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { useStore } from '../../store/useStore'
 import type { FlowNode } from '../../types'
 import EdgeEditor from '../EdgeEditor/EdgeEditor'
+import EntityEditor from '../EntityEditor/EntityEditor'
 import MiniMap from './MiniMap'
-import { ChevronDown, ChevronUp, Table, User, Cog, Box, Key, Link2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Table, User, Cog, Box, Key, Link2, AlignLeft, AlignCenter, AlignRight, LayoutGrid } from 'lucide-react'
 
 const BASE_CANVAS_W = 6000
 const BASE_CANVAS_H = 4000
@@ -220,13 +221,63 @@ export default function Canvas() {
   const activeBusinessFlowId = store.activeBusinessFlowId
   const activeFlow = project?.businessFlows?.find(f => f.id === activeBusinessFlowId)
   const flowAnimationSpeed = store.flowAnimationSpeed
-  const [hoveredFieldInfo, setHoveredFieldInfo] = useState<{ name: string, ref?: string } | null>(null)
+  const [hoveredFieldInfo, setHoveredFieldInfo] = useState<{ nodeId: string, name: string, ref?: string } | null>(null)
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
   const normalizeFieldName = useCallback((name: string) => name.toLowerCase().replace(/[\s_-]/g, ''), [])
-  const selectedNodeId = store.selectedNodeId
+  const selectedNodeIds = store.selectedNodeIds
+  const selectedEdgeId = store.selectedEdgeId
   const searchQuery = store.searchQuery.toLowerCase()
   const activeRequirement = project?.requirements?.find(r => r.id === store.selectedRequirementId)
   const linkingRequirementId = store.linkingRequirementId
+  const [editNodeId, setEditNodeId] = useState<string | null>(null)
+  const [editEdgeId, setEditEdgeId] = useState<string | null>(null)
+  const [inlineEditNodeId, setInlineEditNodeId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const s = useStore.getState()
+        if (s.selectedNodeIds.length > 0) {
+          s.selectedNodeIds.forEach(id => s.deleteNode(id))
+          s.selectNodes([])
+        } else if (s.selectedEdgeId) {
+          s.deleteEdge(s.selectedEdgeId)
+          s.selectEdge(null)
+        }
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        const s = useStore.getState()
+        if (e.shiftKey) {
+          s.redo()
+        } else {
+          s.undo()
+        }
+      }
+      
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        useStore.getState().redo()
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault()
+        const s = useStore.getState()
+        const currentNodes = s.currentProject()?.nodes || []
+        if (s.selectedNodeIds.length > 0) {
+           s.selectedNodeIds.forEach(id => {
+             const node = currentNodes.find(n => n.id === id)
+             if (node) {
+               s.addNode({ ...node, x: node.x + 30, y: node.y + 30 })
+             }
+           })
+        }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   const [layoutTick, setLayoutTick] = useState(0)
   
@@ -250,9 +301,9 @@ export default function Canvas() {
   }, [nodes])
 
   const connectedEdgeIds = useMemo(() => {
-    if (!selectedNodeId) return new Set<string>()
-    return new Set(edges.filter(e => e.sourceId === selectedNodeId || e.targetId === selectedNodeId).map(e => e.id))
-  }, [selectedNodeId, edges])
+    if (selectedNodeIds.length === 0) return new Set<string>()
+    return new Set(edges.filter(e => selectedNodeIds.includes(e.sourceId) || selectedNodeIds.includes(e.targetId)).map(e => e.id))
+  }, [selectedNodeIds, edges])
 
   const portLayouts = useMemo(() => {
     const counts: Record<string, Record<string, number>> = {}
@@ -313,14 +364,14 @@ export default function Canvas() {
   }, [edges, getEffectiveRectAndId, layoutTick])
 
   const connectedNodeIds = useMemo(() => {
-    if (!selectedNodeId) return new Set<string>()
-    const s = new Set<string>([selectedNodeId])
+    if (selectedNodeIds.length === 0) return new Set<string>()
+    const s = new Set<string>(selectedNodeIds)
     edges.forEach(e => {
-      if (e.sourceId === selectedNodeId) s.add(e.targetId)
-      if (e.targetId === selectedNodeId) s.add(e.sourceId)
+      if (selectedNodeIds.includes(e.sourceId)) s.add(e.targetId)
+      if (selectedNodeIds.includes(e.targetId)) s.add(e.sourceId)
     })
     return s
-  }, [selectedNodeId, edges])
+  }, [selectedNodeIds, edges])
 
   const [pulsingNodeId, setPulsingNodeId] = useState<string | null>(null)
   const [ballPos, setBallPos] = useState<{ x: number; y: number } | null>(null)
@@ -598,7 +649,12 @@ export default function Canvas() {
     // Blank area → deselect edge + node + start panning
     store.selectEdge(null)
     store.selectNode(null)
-    drag.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, ox, oy }
+    if (e.shiftKey) {
+      drag.current = { kind: 'select', sx: e.clientX, sy: e.clientY, ox, oy }
+      setSelectionBox({ startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY })
+    } else {
+      drag.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, ox, oy }
+    }
   }, [store, nodes, edges, regions])
 
   const rafRef = useRef<number | null>(null)
@@ -707,6 +763,11 @@ export default function Canvas() {
             viewportRef.current.style.backgroundPosition = `${newX}px ${newY}px`
           }
         }
+        return
+      }
+
+      if (d.kind === 'select') {
+        setSelectionBox(s => s ? { ...s, currentX: e.clientX, currentY: e.clientY } : null)
         return
       }
 
@@ -861,6 +922,39 @@ export default function Canvas() {
         }
       }
 
+      if (d.kind === 'select') {
+        setSelectionBox(s => {
+          if (s) {
+            const minX = Math.min(s.startX, s.currentX)
+            const maxX = Math.max(s.startX, s.currentX)
+            const minY = Math.min(s.startY, s.currentY)
+            const maxY = Math.max(s.startY, s.currentY)
+            
+            const l = layerRef.current
+            const rect = viewportRef.current?.getBoundingClientRect()
+            if (l && rect) {
+               const scale = store.viewport.scale
+               const lx = l.offsetLeft || 0
+               const ly = l.offsetTop || 0
+               
+               const cMinX = (minX - rect.left - lx) / scale
+               const cMaxX = (maxX - rect.left - lx) / scale
+               const cMinY = (minY - rect.top - ly) / scale
+               const cMaxY = (maxY - rect.top - ly) / scale
+
+               const selected = nodes.filter(n => {
+                 const el = nodeRefs.current.get(n.id)
+                 const w = el?.offsetWidth || 160
+                 const h = el?.offsetHeight || 80
+                 return (n.x < cMaxX && n.x + w > cMinX && n.y < cMaxY && n.y + h > cMinY)
+               }).map(n => n.id)
+               store.selectNodes(selected)
+            }
+          }
+          return null
+        })
+      }
+
       drag.current = null
     }
 
@@ -871,6 +965,7 @@ export default function Canvas() {
 
   const [connecting, setConnecting] = useState<{ fromId: string; fromPort: string; mouseX: number; mouseY: number } | null>(null)
   const [newEdgeTarget, setNewEdgeTarget] = useState<{ sourceId: string; targetId: string } | null>(null)
+  const [selectionBox, setSelectionBox] = useState<{ startX: number, startY: number, currentX: number, currentY: number } | null>(null)
 
 
 
@@ -918,7 +1013,7 @@ export default function Canvas() {
               )
             ) : activeRequirement ? (
               (activeRequirement.regionIds || []).includes(r.id)
-            ) : selectedNodeId ? (
+            ) : selectedNodeIds.length > 0 ? (
               nodes.filter(n => n.regionId === r.id).some(n => connectedNodeIds.has(n.id))
             ) : (activeFlow ? (
               nodes.filter(n => n.regionId === r.id).some(n => activeFlow.nodeIds.includes(n.id))
@@ -1037,7 +1132,7 @@ export default function Canvas() {
                 edge.label.toLowerCase().includes(searchQuery) || 
                 nodes.find(n => n.id === edge.sourceId)?.label.toLowerCase().includes(searchQuery) ||
                 nodes.find(n => n.id === edge.targetId)?.label.toLowerCase().includes(searchQuery)
-              ) : activeRequirement ? inReq : selectedNodeId ? connectedEdgeIds.has(edge.id) : (activeFlow ? inFlow : true)
+              ) : activeRequirement ? inReq : selectedNodeIds.length > 0 ? connectedEdgeIds.has(edge.id) : (activeFlow ? inFlow : true)
               const edgeOpacity = isEdgeActive ? (store.editingBusinessFlowId && !inFlow ? 0.3 : linkingRequirementId && !inReq ? 0.3 : 1) : 0.15
               const isHovered = hoveredEdgeId === edge.id
               
@@ -1085,6 +1180,10 @@ export default function Canvas() {
                   className="cursor-pointer drop-shadow-sm"
                   onMouseEnter={() => setHoveredEdgeId(edge.id)}
                   onMouseLeave={() => setHoveredEdgeId(null)}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    setEditEdgeId(edge.id)
+                  }}
                 >
                   <defs>
                     <linearGradient id={gradId} gradientUnits="userSpaceOnUse" x1={x1} y1={y1} x2={x2} y2={y2}>
@@ -1193,7 +1292,7 @@ export default function Canvas() {
               const inReq = activeRequirement ? (activeRequirement.edgeIds || []).includes(pos.id) : false
               const isLabelActive = searchQuery ? (
                 pos.label.toLowerCase().includes(searchQuery)
-              ) : activeRequirement ? inReq : selectedNodeId ? connectedEdgeIds.has(pos.id) : (activeFlow ? inFlow : true)
+              ) : activeRequirement ? inReq : selectedNodeIds.length > 0 ? connectedEdgeIds.has(pos.id) : (activeFlow ? inFlow : true)
               const isHovered = hoveredEdgeId === pos.id
               const labelOpacity = isHovered ? 1 : (isLabelActive ? 1 : 0.15)
               return (
@@ -1206,10 +1305,15 @@ export default function Canvas() {
                   style={{
                     left: pos.x - pos.width / 2,
                     top: pos.y - pos.height / 2,
+                    width: pos.width,
                     opacity: labelOpacity
                   }}
                   onMouseEnter={() => setHoveredEdgeId(pos.id)}
                   onMouseLeave={() => setHoveredEdgeId(null)}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    setEditEdgeId(pos.id)
+                  }}
                 >
                   {pos.label}
                 </div>
@@ -1228,7 +1332,7 @@ export default function Canvas() {
               node.label.toLowerCase().includes(searchQuery) ||
               (node.sublabel && node.sublabel.toLowerCase().includes(searchQuery)) ||
               (node.fields && node.fields.some(f => f.name.toLowerCase().includes(searchQuery)))
-            ) : activeRequirement ? inReq : selectedNodeId ? connectedNodeIds.has(node.id) : (activeFlow ? activeFlow.nodeIds.includes(node.id) : true)
+            ) : activeRequirement ? inReq : selectedNodeIds.length > 0 ? connectedNodeIds.has(node.id) : (activeFlow ? activeFlow.nodeIds.includes(node.id) : true)
             const isNodeInEditMode = store.editingBusinessFlowId ? (
               activeFlow?.nodeIds.includes(node.id)
             ) : linkingRequirementId ? (
@@ -1241,13 +1345,21 @@ export default function Canvas() {
               <div
                 key={node.id}
                 ref={(el) => { if (el) nodeRefs.current.set(node.id, el) }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  setEditNodeId(node.id)
+                }}
                 onClick={(e) => {
                   e.stopPropagation()
                   if (linkingRequirementId) {
                     store.toggleNodeInRequirement(linkingRequirementId, node.id)
                     return
                   }
-                  store.selectNode(node.id)
+                  if (e.shiftKey) {
+                    store.selectNode(node.id, true)
+                  } else {
+                    store.selectNode(node.id)
+                  }
                 }}
                 className={`node-el absolute z-20 cursor-move bg-white border transition-colors transition-shadow duration-200 rounded-xl p-3.5 min-w-40 flex flex-col group/node hover:ring-2 hover:ring-indigo-400 hover:shadow-lg hover:-translate-y-0.5 ${
                   !isNodeActive ? 'opacity-15 grayscale border-zinc-200 shadow-none' : (
@@ -1268,24 +1380,49 @@ export default function Canvas() {
               {/* Header & Fields */}
               {(() => {
                 const nodeContainsHoveredField = hoveredFieldInfo && node.fields?.some(f => {
-                  const nName = normalizeFieldName(f.name)
-                  const nRef = f.ref ? normalizeFieldName(f.ref) : undefined
-                  return nName === hoveredFieldInfo.name || 
-                         (nRef && nRef === hoveredFieldInfo.name) ||
-                         (hoveredFieldInfo.ref && nName === hoveredFieldInfo.ref) ||
-                         (hoveredFieldInfo.ref && nRef && nRef === hoveredFieldInfo.ref)
+                  return (node.id === hoveredFieldInfo.nodeId && f.name === hoveredFieldInfo.name) || 
+                         (f.ref === `${hoveredFieldInfo.nodeId}.${hoveredFieldInfo.name}`) ||
+                         (hoveredFieldInfo.ref === `${node.id}.${f.name}`)
                 })
                 return (
                   <>
                     <div className={`flex items-center justify-between pb-2 border-b border-zinc-200/80 mb-1 ${
                       node.collapsedFields && nodeContainsHoveredField ? 'bg-blue-50 rounded-md px-2 -mx-2 ring-1 ring-blue-200 transition-all duration-300' : 'transition-all duration-300'
                     }`}>
-                      <div className="flex items-center gap-1.5">
+                      <div 
+                        className="flex items-center gap-1.5"
+                        onDoubleClick={(e) => {
+                          e.stopPropagation()
+                          setInlineEditNodeId(node.id)
+                        }}
+                      >
                         {node.type === 'entity' ? <Table size={12} className="text-zinc-400" /> :
                          node.type === 'actor' ? <User size={12} className="text-zinc-400" /> :
                          node.type === 'process' ? <Cog size={12} className="text-zinc-400" /> :
                          <Box size={12} className="text-zinc-400" />}
-                        <span className="text-xs font-bold text-zinc-900 tracking-tight">{node.label}</span>
+                        {inlineEditNodeId === node.id ? (
+                           <input
+                             className="text-xs font-bold text-zinc-900 tracking-tight bg-white outline-none w-24 border-b-2 border-indigo-500 pb-0.5"
+                             defaultValue={node.label}
+                             autoFocus
+                             onFocus={(e) => e.target.select()}
+                             onBlur={(e) => {
+                               const newLabel = e.target.value.trim()
+                               if (newLabel && newLabel !== node.label) {
+                                 store.updateNode(node.id, { label: newLabel })
+                               }
+                               setInlineEditNodeId(null)
+                             }}
+                             onKeyDown={(e) => {
+                               if (e.key === 'Enter') e.currentTarget.blur()
+                               if (e.key === 'Escape') setInlineEditNodeId(null)
+                             }}
+                             onClick={e => e.stopPropagation()}
+                             onDoubleClick={e => e.stopPropagation()}
+                           />
+                        ) : (
+                          <span className="text-xs font-bold text-zinc-900 tracking-tight">{node.label}</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-1">
                         {node.sublabel && (
@@ -1309,18 +1446,15 @@ export default function Canvas() {
                     {!node.collapsedFields && node.fields && node.fields.length > 0 && (
                       <div className="flex flex-col rounded-md overflow-hidden border border-zinc-100">
                         {node.fields.map((f, i) => {
-                          const nName = normalizeFieldName(f.name)
-                          const nRef = f.ref ? normalizeFieldName(f.ref) : undefined
                           const isHoverMatched = hoveredFieldInfo && (
-                            nName === hoveredFieldInfo.name || 
-                            (nRef && nRef === hoveredFieldInfo.name) ||
-                            (hoveredFieldInfo.ref && nName === hoveredFieldInfo.ref) ||
-                            (hoveredFieldInfo.ref && nRef && nRef === hoveredFieldInfo.ref)
+                            (node.id === hoveredFieldInfo.nodeId && f.name === hoveredFieldInfo.name) || 
+                            (f.ref === `${hoveredFieldInfo.nodeId}.${hoveredFieldInfo.name}`) ||
+                            (hoveredFieldInfo.ref === `${node.id}.${f.name}`)
                           )
                           return (
                             <div 
                               key={f.name} 
-                              onMouseEnter={() => setHoveredFieldInfo({ name: nName, ref: nRef })}
+                              onMouseEnter={() => setHoveredFieldInfo({ nodeId: node.id, name: f.name, ref: f.ref })}
                               onMouseLeave={() => setHoveredFieldInfo(null)}
                               className={`flex items-center justify-between text-[11px] gap-4 px-2 py-1 transition-colors cursor-default ${
                                 isHoverMatched ? 'bg-blue-100 text-blue-900 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.3)]' : (i % 2 === 0 ? 'bg-zinc-50/50' : 'bg-white')
@@ -1375,12 +1509,55 @@ export default function Canvas() {
         </div>
       </div>
 
+      {editNodeId && (
+        <EntityEditor
+          editNode={nodes.find(n => n.id === editNodeId)}
+          onClose={() => setEditNodeId(null)}
+        />
+      )}
+      {selectionBox && (
+        <div
+          className="fixed border border-indigo-500 bg-indigo-500/10 pointer-events-none z-[100]"
+          style={{
+            left: Math.min(selectionBox.startX, selectionBox.currentX),
+            top: Math.min(selectionBox.startY, selectionBox.currentY),
+            width: Math.abs(selectionBox.currentX - selectionBox.startX),
+            height: Math.abs(selectionBox.currentY - selectionBox.startY),
+          }}
+        />
+      )}
       {newEdgeTarget && (
         <EdgeEditor
           sourceId={newEdgeTarget.sourceId}
           targetId={newEdgeTarget.targetId}
           onClose={() => setNewEdgeTarget(null)}
         />
+      )}
+      {editEdgeId && (
+        <EdgeEditor
+          edgeId={editEdgeId}
+          onClose={() => setEditEdgeId(null)}
+        />
+      )}
+      {selectedNodeIds.length > 1 && !drag.current && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-white border border-zinc-200 shadow-xl rounded-xl p-1.5 flex items-center gap-1">
+          <div className="text-[10px] font-bold text-zinc-400 px-2 uppercase tracking-wider">对齐</div>
+          <div className="w-px h-4 bg-zinc-200 mx-1" />
+          <button className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-600 transition-colors" title="左对齐" onClick={() => store.alignNodes(selectedNodeIds, 'left')}><AlignLeft size={16} /></button>
+          <button className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-600 transition-colors" title="水平居中" onClick={() => store.alignNodes(selectedNodeIds, 'center')}><AlignCenter size={16} /></button>
+          <button className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-600 transition-colors" title="右对齐" onClick={() => store.alignNodes(selectedNodeIds, 'right')}><AlignRight size={16} /></button>
+          <div className="w-px h-4 bg-zinc-200 mx-1" />
+          <button className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-600 transition-colors" title="上对齐" onClick={() => store.alignNodes(selectedNodeIds, 'top')}><AlignLeft size={16} className="rotate-90" /></button>
+          <button className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-600 transition-colors" title="垂直居中" onClick={() => store.alignNodes(selectedNodeIds, 'middle')}><AlignCenter size={16} className="rotate-90" /></button>
+          <button className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-600 transition-colors" title="下对齐" onClick={() => store.alignNodes(selectedNodeIds, 'bottom')}><AlignRight size={16} className="rotate-90" /></button>
+          {selectedNodeIds.length > 2 && (
+            <>
+              <div className="w-px h-4 bg-zinc-200 mx-1" />
+              <button className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-600 transition-colors" title="水平等距" onClick={() => store.alignNodes(selectedNodeIds, 'distribute-h')}><LayoutGrid size={16} /></button>
+              <button className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-600 transition-colors" title="垂直等距" onClick={() => store.alignNodes(selectedNodeIds, 'distribute-v')}><LayoutGrid size={16} className="rotate-90" /></button>
+            </>
+          )}
+        </div>
       )}
       <MiniMap />
     </>

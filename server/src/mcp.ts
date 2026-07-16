@@ -128,6 +128,33 @@ export function setupMcp(server: Server, store: Store) {
           }
         },
         {
+          name: 'duplicate_entity',
+          description: 'Duplicate an entity by ID',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              project_id: { type: 'string' },
+              entity_id: { type: 'string' },
+              dx: { type: 'number', description: 'Offset X (default 30)' },
+              dy: { type: 'number', description: 'Offset Y (default 30)' }
+            },
+            required: ['project_id', 'entity_id']
+          }
+        },
+        {
+          name: 'align_entities',
+          description: 'Align multiple entities',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              project_id: { type: 'string' },
+              entity_ids: { type: 'array', items: { type: 'string' } },
+              alignment: { type: 'string', description: 'left|center|right|top|middle|bottom|distribute-h|distribute-v' }
+            },
+            required: ['project_id', 'entity_ids', 'alignment']
+          }
+        },
+        {
           name: 'list_flows',
           description: 'List all data flows in a project',
           inputSchema: {
@@ -161,6 +188,32 @@ export function setupMcp(server: Server, store: Store) {
               dir: { type: 'string', description: 'fwd|rev|both' }
             },
             required: ['project_id', 'source_id', 'target_id']
+          }
+        },
+        {
+          name: 'delete_edge',
+          description: 'Delete a data flow/edge by its id (alias of delete_flow)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              project_id: { type: 'string' },
+              flow_id: { type: 'string' }
+            },
+            required: ['project_id', 'flow_id']
+          }
+        },
+        {
+          name: 'update_edge',
+          description: 'Update a data flow/edge properties (label, dir) (alias of update_flow)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              project_id: { type: 'string' },
+              flow_id: { type: 'string' },
+              label: { type: 'string' },
+              dir: { type: 'string' }
+            },
+            required: ['project_id', 'flow_id']
           }
         },
         {
@@ -492,6 +545,16 @@ export function setupMcp(server: Server, store: Store) {
           const ok = await store.deleteNode(args.project_id as string, args.entity_id as string);
           return { content: [{ type: 'text', text: ok ? `Entity deleted` : `Entity not found` }] };
         }
+        case 'duplicate_entity': {
+          const { project_id, entity_id, dx = 30, dy = 30 } = args as any;
+          const node = await store.duplicateEntity(project_id, entity_id, dx, dy);
+          return { content: [{ type: 'text', text: node ? `Entity duplicated:\n${JSON.stringify(node, null, 2)}` : 'Entity not found' }] };
+        }
+        case 'align_entities': {
+          const { project_id, entity_ids, alignment } = args as any;
+          const ok = await store.alignEntities(project_id, entity_ids, alignment);
+          return { content: [{ type: 'text', text: ok ? `Entities aligned` : `Failed to align entities` }] };
+        }
         case 'list_flows': {
           const p = await store.getProject(args.project_id as string);
           if (!p) return { content: [{ type: 'text', text: 'Project not found' }] };
@@ -635,6 +698,20 @@ export function setupMcp(server: Server, store: Store) {
         case 'delete_business_flow': {
           const ok = await store.deleteBusinessFlow(args.project_id as string, args.flow_id as string);
           return { content: [{ type: 'text', text: ok ? `Flow deleted` : `Flow not found` }] };
+        }
+        case 'delete_edge':
+        case 'delete_flow': {
+          const ok = await store.deleteEdge(args.project_id as string, args.flow_id as string);
+          return { content: [{ type: 'text', text: ok ? `Flow deleted` : `Flow not found` }] };
+        }
+        case 'update_edge':
+        case 'update_flow': {
+          const updates: any = {};
+          if (args.label) updates.label = args.label;
+          if (args.dir) updates.dir = args.dir;
+          const flow = await store.updateEdge(args.project_id as string, args.flow_id as string, updates);
+          if (!flow) return { content: [{ type: 'text', text: 'Flow not found' }] };
+          return { content: [{ type: 'text', text: `Flow updated:\n${JSON.stringify(flow, null, 2)}` }] };
         }
         case 'query_project': {
           const p = await store.getProject(args.project_id as string);

@@ -10,7 +10,9 @@ function uid(prefix: string) { return prefix + Math.random().toString(36).slice(
 interface AppState {
   projects: Project[]
   activeProjectId: string | null
-  selectedNodeId: string | null
+  selectedNodeIds: string[]
+  historyPast: Project[]
+  historyFuture: Project[]
   viewport: ViewportState
   selectedEdgeId: string | null
   flowAnimation: boolean
@@ -28,7 +30,12 @@ interface AppState {
   setSearchQuery: (q: string) => void
   setPage: (page: 'overview' | 'canvas') => void
   setFocusMode: (focus: boolean) => void
-  selectNode: (id: string | null) => void
+  selectNode: (id: string | null, multi?: boolean) => void
+  selectNodes: (ids: string[]) => void
+  alignNodes: (ids: string[], alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'distribute-h' | 'distribute-v') => void
+  undo: () => void
+  redo: () => void
+  recordHistory: () => void
   addProject: (name: string) => Promise<void>
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>
   deleteProject: (id: string) => Promise<void>
@@ -37,6 +44,7 @@ interface AppState {
   moveNode: (id: string, x: number, y: number) => void
   setNodeRegion: (id: string, regionId: string | undefined) => void
   addNode: (node: FlowNode) => void
+  updateNode: (id: string, updates: Partial<FlowNode>) => void
   selectEdge: (id: string | null) => void
   setEdgeDir: (id: string, dir: 'fwd' | 'rev' | 'both') => void
   addEdge: (edge: DataFlow) => void
@@ -84,7 +92,9 @@ export const useStore = create<AppState>((set, get) => ({
   activeProjectId: null,
   activeBusinessFlowId: null,
   editingBusinessFlowId: null,
-  selectedNodeId: null,
+  selectedNodeIds: [],
+  historyPast: [],
+  historyFuture: [],
   viewport: { x: 0, y: 0, scale: 1 },
   selectedEdgeId: null,
   flowAnimation: false,
@@ -121,7 +131,113 @@ export const useStore = create<AppState>((set, get) => ({
 
   setPage: (page) => set({ page }),
 
-  selectNode: (id) => set({ selectedNodeId: id }),
+  selectNode: (id, multi) => set((s) => {
+    if (!id) return { selectedNodeIds: [] }
+    if (multi) {
+      if (s.selectedNodeIds.includes(id)) {
+        return { selectedNodeIds: s.selectedNodeIds.filter(x => x !== id) }
+      }
+      return { selectedNodeIds: [...s.selectedNodeIds, id] }
+    }
+    return { selectedNodeIds: [id] }
+  }),
+
+  selectNodes: (ids) => set({ selectedNodeIds: ids }),
+
+  alignNodes: (ids, alignment) => {
+    get().recordHistory()
+    set(state => {
+      const proj = state.currentProject()
+      if (!proj || ids.length < 2) return {}
+      
+      const targetNodes = proj.nodes.filter(n => ids.includes(n.id))
+      if (targetNodes.length < 2) return {}
+
+      // Calculate bounds
+      const minX = Math.min(...targetNodes.map(n => n.x))
+      const maxX = Math.max(...targetNodes.map(n => n.x + 160)) // assuming ~160 w
+      const minY = Math.min(...targetNodes.map(n => n.y))
+      const maxY = Math.max(...targetNodes.map(n => n.y + 80)) // assuming ~80 h
+      const centerX = (minX + maxX) / 2
+      const centerY = (minY + maxY) / 2
+
+      const newNodes = proj.nodes.map(node => {
+        if (!ids.includes(node.id)) return node
+        let nx = node.x
+        let ny = node.y
+        switch (alignment) {
+          case 'left': nx = minX; break;
+          case 'center': nx = centerX - 80; break;
+          case 'right': nx = maxX - 160; break;
+          case 'top': ny = minY; break;
+          case 'middle': ny = centerY - 40; break;
+          case 'bottom': ny = maxY - 80; break;
+        }
+        return { ...node, x: nx, y: ny }
+      })
+
+      if (alignment === 'distribute-h' && targetNodes.length > 2) {
+        const sorted = [...targetNodes].sort((a, b) => a.x - b.x)
+        const step = (sorted[sorted.length - 1].x - sorted[0].x) / (sorted.length - 1)
+        sorted.forEach((n, i) => {
+          const idx = newNodes.findIndex(nn => nn.id === n.id)
+          if (idx !== -1) newNodes[idx].x = sorted[0].x + step * i
+        })
+      } else if (alignment === 'distribute-v' && targetNodes.length > 2) {
+        const sorted = [...targetNodes].sort((a, b) => a.y - b.y)
+        const step = (sorted[sorted.length - 1].y - sorted[0].y) / (sorted.length - 1)
+        sorted.forEach((n, i) => {
+          const idx = newNodes.findIndex(nn => nn.id === n.id)
+          if (idx !== -1) newNodes[idx].y = sorted[0].y + step * i
+        })
+      }
+
+      return {
+        projects: state.projects.map(p => 
+          p.id === state.activeProjectId ? { ...p, nodes: newNodes } : p
+        )
+      }
+    })
+  },
+
+  recordHistory: () => {
+    const proj = get().currentProject()
+    if (!proj) return
+    set(s => {
+      // Keep up to 50 history states
+      const newPast = [...s.historyPast, JSON.parse(JSON.stringify(proj))]
+      if (newPast.length > 50) newPast.shift()
+      return { historyPast: newPast, historyFuture: [] }
+    })
+  },
+
+  undo: () => {
+    const s = get()
+    const proj = s.currentProject()
+    if (!proj || s.historyPast.length === 0) return
+    const prev = s.historyPast[s.historyPast.length - 1]
+    const newPast = s.historyPast.slice(0, -1)
+    set({
+      projects: s.projects.map(p => p.id === s.activeProjectId ? prev : p),
+      historyPast: newPast,
+      historyFuture: [JSON.parse(JSON.stringify(proj)), ...s.historyFuture]
+    })
+    api.updateProject(proj.id, prev).catch(() => {})
+  },
+
+  redo: () => {
+    const s = get()
+    const proj = s.currentProject()
+    if (!proj || s.historyFuture.length === 0) return
+    const next = s.historyFuture[0]
+    const newFuture = s.historyFuture.slice(1)
+    set({
+      projects: s.projects.map(p => p.id === s.activeProjectId ? next : p),
+      historyPast: [...s.historyPast, JSON.parse(JSON.stringify(proj))],
+      historyFuture: newFuture
+    })
+    api.updateProject(proj.id, next).catch(() => {})
+  },
 
   addProject: async (name) => {
     try {
@@ -175,6 +291,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setNodeRegion: (id, regionId) => {
+    get().recordHistory()
     const proj = get().projects.find(p => p.id === get().activeProjectId)
     if (proj) api.updateNode(proj.id, id, { regionId: regionId ?? null }).catch(() => {})
     set((s) => ({
@@ -185,6 +302,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addNode: (node) => {
+    get().recordHistory()
     const proj = get().projects.find(p => p.id === get().activeProjectId)
     if (proj) api.addNode(proj.id, { ...node, id: undefined }).catch(() => {})
     set((s) => ({
@@ -194,7 +312,23 @@ export const useStore = create<AppState>((set, get) => ({
     }))
   },
 
+  updateNode: (id, updates) => {
+    get().recordHistory()
+    const proj = get().projects.find(p => p.id === get().activeProjectId)
+    if (proj) api.updateNode(proj.id, id, updates).catch(() => {})
+    set((s) => ({
+      projects: s.projects.map(p =>
+        p.id === s.activeProjectId ? {
+          ...p,
+          nodes: p.nodes.map(n => n.id === id ? { ...n, ...updates } : n),
+          updatedAt: now()
+        } : p
+      ),
+    }))
+  },
+
   deleteNode: (id) => {
+    get().recordHistory()
     const proj = get().projects.find(p => p.id === get().activeProjectId)
     if (proj) api.deleteNode(proj.id, id).catch(() => {})
     set((s) => ({
@@ -207,6 +341,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addEdge: (edge) => {
+    get().recordHistory()
     const proj = get().projects.find(p => p.id === get().activeProjectId)
     if (proj) api.addEdge(proj.id, { ...edge, id: undefined }).then(() => get().syncCurrentProject()).catch(() => {})
     set((s) => ({
@@ -217,6 +352,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateEdge: async (edgeId, updates) => {
+    get().recordHistory()
     const p = get().currentProject()
     if (!p) return
     try {
@@ -226,6 +362,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   deleteEdge: async (edgeId) => {
+    get().recordHistory()
     const proj = get().projects.find(p => p.id === get().activeProjectId)
     if (proj) {
       try {
@@ -238,6 +375,7 @@ export const useStore = create<AppState>((set, get) => ({
   selectEdge: (id) => set({ selectedEdgeId: id }),
 
   setEdgeDir: async (id, dir) => {
+    get().recordHistory()
     const proj = get().projects.find(p => p.id === get().activeProjectId)
     if (proj) {
       try {
@@ -304,6 +442,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   formatCanvas: async (mode = 'default') => {
+    get().recordHistory()
     const proj = get().projects.find(p => p.id === get().activeProjectId)
     if (!proj) return
 
@@ -487,6 +626,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addRegion: (region) => {
+    get().recordHistory()
     const proj = get().projects.find(p => p.id === get().activeProjectId)
     if (proj) api.addRegion(proj.id, { ...region, id: undefined }).catch(() => {})
     set((s) => ({
@@ -497,6 +637,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateRegion: (id, updates) => {
+    get().recordHistory()
     const proj = get().projects.find(p => p.id === get().activeProjectId)
     if (proj) api.updateRegion(proj.id, id, updates).catch(() => {})
     set((s) => ({
@@ -509,6 +650,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   deleteRegion: (id) => {
+    get().recordHistory()
     const proj = get().projects.find(p => p.id === get().activeProjectId)
     if (proj) api.deleteRegion(proj.id, id).catch(() => {})
     set((s) => ({

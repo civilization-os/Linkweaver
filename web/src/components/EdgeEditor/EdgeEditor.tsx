@@ -4,35 +4,58 @@ import type { DataFlow } from '../../types'
 import { X, ArrowRight } from 'lucide-react'
 
 interface Props {
-  sourceId: string
-  targetId: string
+  sourceId?: string
+  targetId?: string
+  edgeId?: string
   onClose: () => void
 }
 
-export default function EdgeEditor({ sourceId, targetId, onClose }: Props) {
+export default function EdgeEditor({ sourceId, targetId, edgeId, onClose }: Props) {
   const addEdge = useStore(s => s.addEdge)
+  const updateEdge = useStore(s => s.updateEdge)
+  const deleteEdge = useStore(s => s.deleteEdge)
   const project = useStore(s => s.currentProject())
 
-  const sourceNode = project?.nodes.find(n => n.id === sourceId)
-  const targetNode = project?.nodes.find(n => n.id === targetId)
+  const existingEdge = edgeId ? project?.edges.find(e => e.id === edgeId) : null
+  const sId = existingEdge ? existingEdge.sourceId : sourceId
+  const tId = existingEdge ? existingEdge.targetId : targetId
 
-  const [label, setLabel] = useState('')
-  const [dir, setDir] = useState<'fwd' | 'rev' | 'both'>('fwd')
-  const [mappings, setMappings] = useState<string>('')
+  const sourceNode = project?.nodes.find(n => n.id === sId)
+  const targetNode = project?.nodes.find(n => n.id === tId)
+
+  const [label, setLabel] = useState(existingEdge?.label ?? '')
+  const [dir, setDir] = useState<'fwd' | 'rev' | 'both'>(existingEdge?.dir ?? 'fwd')
+  const [mappings, setMappings] = useState<string>(existingEdge?.dataMappings ?? '')
 
   const handleSave = () => {
-    const edge: DataFlow = {
-      id: 'e' + Math.random().toString(36).slice(2, 6),
-      sourceId,
-      sourcePort: 'r',
-      targetId,
-      targetPort: 'l',
-      label: label.trim() || `${sourceNode?.label ?? '?'} → ${targetNode?.label ?? '?'}`,
-      dataMappings: mappings.trim() || undefined,
-      dir,
+    const finalLabel = label.trim() || `${sourceNode?.label ?? '?'} → ${targetNode?.label ?? '?'}`
+    if (existingEdge) {
+      updateEdge(existingEdge.id, {
+        label: finalLabel,
+        dataMappings: mappings.trim() || undefined,
+        dir
+      })
+    } else {
+      const edge: DataFlow = {
+        id: 'e' + Math.random().toString(36).slice(2, 6),
+        sourceId: sId!,
+        sourcePort: 'r',
+        targetId: tId!,
+        targetPort: 'l',
+        label: finalLabel,
+        dataMappings: mappings.trim() || undefined,
+        dir,
+      }
+      addEdge(edge)
     }
-    addEdge(edge)
     onClose()
+  }
+
+  const handleDelete = () => {
+    if (existingEdge) {
+      deleteEdge(existingEdge.id)
+      onClose()
+    }
   }
 
   return (
@@ -43,7 +66,7 @@ export default function EdgeEditor({ sourceId, targetId, onClose }: Props) {
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
-          <span className="text-sm font-bold text-zinc-900">新建数据流</span>
+          <span className="text-sm font-bold text-zinc-900">{existingEdge ? '编辑数据流' : '新建数据流'}</span>
           <button className="text-zinc-400 hover:text-zinc-900 transition-colors p-1 cursor-pointer" onClick={onClose}>
             <X size={16} />
           </button>
@@ -139,19 +162,31 @@ export default function EdgeEditor({ sourceId, targetId, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 px-5 py-4 bg-zinc-50 border-t border-zinc-100">
-          <button
-            className="px-4 py-2 bg-white hover:bg-zinc-100 text-zinc-600 border border-zinc-200 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-            onClick={onClose}
-          >
-            取消
-          </button>
-          <button
-            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-50 text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
-            onClick={handleSave}
-          >
-            创建
-          </button>
+        <div className="flex items-center justify-between px-5 py-4 bg-zinc-50 border-t border-zinc-100">
+          {existingEdge ? (
+            <button
+              className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              onClick={handleDelete}
+            >
+              删除
+            </button>
+          ) : (
+            <div />
+          )}
+          <div className="flex gap-2">
+            <button
+              className="px-4 py-2 bg-white hover:bg-zinc-100 text-zinc-600 border border-zinc-200 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              onClick={onClose}
+            >
+              取消
+            </button>
+            <button
+              className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-50 text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+              onClick={handleSave}
+            >
+              {existingEdge ? '保存' : '创建'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

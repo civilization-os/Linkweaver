@@ -150,7 +150,72 @@ export class Store {
       if (index === -1) return { result: false, mutate: false };
       
       p.nodes.splice(index, 1);
+      // Clean up connected edges
       p.edges = p.edges.filter(e => e.sourceId !== nodeId && e.targetId !== nodeId);
+      
+      p.updatedAt = now();
+      return { result: true, mutate: true };
+    });
+  }
+
+  async duplicateEntity(projectId: string, entityId: string, dx: number = 30, dy: number = 30): Promise<FlowNode | null> {
+    return this.withLock(projects => {
+      const p = projects.find(p => p.id === projectId);
+      if (!p) return { result: null, mutate: false };
+      
+      const node = p.nodes.find(n => n.id === entityId);
+      if (!node) return { result: null, mutate: false };
+
+      const newNode: FlowNode = {
+        ...node,
+        id: generateId('n-'),
+        x: node.x + dx,
+        y: node.y + dy,
+        fields: node.fields ? JSON.parse(JSON.stringify(node.fields)) : undefined
+      };
+      
+      p.nodes.push(newNode);
+      p.updatedAt = now();
+      return { result: newNode, mutate: true };
+    });
+  }
+
+  async alignEntities(projectId: string, entityIds: string[], alignment: string): Promise<boolean> {
+    return this.withLock(projects => {
+      const p = projects.find(p => p.id === projectId);
+      if (!p || entityIds.length < 2) return { result: false, mutate: false };
+      
+      const targetNodes = p.nodes.filter(n => entityIds.includes(n.id));
+      if (targetNodes.length < 2) return { result: false, mutate: false };
+
+      const minX = Math.min(...targetNodes.map(n => n.x));
+      const maxX = Math.max(...targetNodes.map(n => n.x + 160));
+      const minY = Math.min(...targetNodes.map(n => n.y));
+      const maxY = Math.max(...targetNodes.map(n => n.y + 80));
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+
+      targetNodes.forEach(node => {
+        switch (alignment) {
+          case 'left': node.x = minX; break;
+          case 'center': node.x = centerX - 80; break;
+          case 'right': node.x = maxX - 160; break;
+          case 'top': node.y = minY; break;
+          case 'middle': node.y = centerY - 40; break;
+          case 'bottom': node.y = maxY - 80; break;
+        }
+      });
+
+      if (alignment === 'distribute-h' && targetNodes.length > 2) {
+        const sorted = [...targetNodes].sort((a, b) => a.x - b.x);
+        const step = (sorted[sorted.length - 1].x - sorted[0].x) / (sorted.length - 1);
+        sorted.forEach((n, i) => n.x = sorted[0].x + step * i);
+      } else if (alignment === 'distribute-v' && targetNodes.length > 2) {
+        const sorted = [...targetNodes].sort((a, b) => a.y - b.y);
+        const step = (sorted[sorted.length - 1].y - sorted[0].y) / (sorted.length - 1);
+        sorted.forEach((n, i) => n.y = sorted[0].y + step * i);
+      }
+
       p.updatedAt = now();
       return { result: true, mutate: true };
     });
