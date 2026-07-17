@@ -18,6 +18,7 @@ interface AppState {
   flowAnimation: boolean
   flowAnimationSpeed: number
   showGrid: boolean
+  showThreeColumns: boolean
   page: 'overview' | 'canvas'
   loading: boolean
   searchQuery: string
@@ -53,6 +54,7 @@ interface AppState {
   toggleFlow: () => void
   setFlowAnimationSpeed: (speed: number) => void
   toggleGrid: () => void
+  toggleThreeColumns: () => void
   moveRegion: (id: string, dx: number, dy: number) => void
   syncNodePos: (id: string) => void
   syncRegionPos: (id: string) => void
@@ -100,6 +102,7 @@ export const useStore = create<AppState>((set, get) => ({
   flowAnimation: false,
   flowAnimationSpeed: 1000,
   showGrid: true,
+  showThreeColumns: true,
   page: 'overview',
   loading: true,
   searchQuery: '',
@@ -388,6 +391,7 @@ export const useStore = create<AppState>((set, get) => ({
   toggleFlow: () => set((s) => ({ flowAnimation: !s.flowAnimation })),
   setFlowAnimationSpeed: (speed: number) => set({ flowAnimationSpeed: speed }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
+  toggleThreeColumns: () => set((s) => ({ showThreeColumns: !s.showThreeColumns })),
 
   moveRegion: (id, dx, dy) => {
     const proj = get().projects.find(p => p.id === get().activeProjectId)
@@ -470,7 +474,8 @@ export const useStore = create<AppState>((set, get) => ({
         regionNodes.forEach(n => {
           const fieldCount = n.fields ? n.fields.length : 0
           const actualHeight = 60 + fieldCount * 22
-          g.setNode(n.id, { width: 180 + 40, height: actualHeight + 40 })
+          const nodeWidth = get().showThreeColumns ? 300 : 220
+          g.setNode(n.id, { width: nodeWidth + 40, height: actualHeight + 40 })
         })
         
         edges.forEach(e => {
@@ -499,9 +504,10 @@ export const useStore = create<AppState>((set, get) => ({
           const dn = g.node(n.id)
           const fieldCount = n.fields ? n.fields.length : 0
           const actualHeight = 60 + fieldCount * 22
+          const nodeWidth = get().showThreeColumns ? 300 : 220
           return {
              id: n.id,
-             x: dn.x - minX + 50 - 90,
+             x: dn.x - minX + 50 - (nodeWidth / 2),
              y: dn.y - minY + 80 - actualHeight / 2
           }
         })
@@ -515,7 +521,8 @@ export const useStore = create<AppState>((set, get) => ({
       unassignedNodes.forEach(n => {
         const fieldCount = n.fields ? n.fields.length : 0
         const actualHeight = 60 + fieldCount * 22
-        const width = 180 + 40
+        const nodeWidth = get().showThreeColumns ? 300 : 220
+        const width = nodeWidth + 40
         const height = actualHeight + 40
         blocks.push({ type: 'node', id: n.id, width, height, nodes: [{ id: n.id, x: 20, y: 20 }] })
         totalArea += width * height
@@ -581,7 +588,8 @@ export const useStore = create<AppState>((set, get) => ({
       nodes.forEach(n => {
         const fieldCount = n.fields ? n.fields.length : 0
         const actualHeight = 60 + fieldCount * 22
-        g.setNode(n.id, { width: 180 + 40, height: actualHeight + 40 }) 
+        const nodeWidth = get().showThreeColumns ? 300 : 220
+        g.setNode(n.id, { width: nodeWidth + 40, height: actualHeight + 40 }) 
         if (n.regionId) {
           g.setParent(n.id, n.regionId)
         }
@@ -598,21 +606,41 @@ export const useStore = create<AppState>((set, get) => ({
         if (dn) {
           const fieldCount = n.fields ? n.fields.length : 0
           const actualHeight = 60 + fieldCount * 22
-          n.x = dn.x - 90
+          const nodeWidth = get().showThreeColumns ? 300 : 220
+          n.x = dn.x - (nodeWidth / 2)
           n.y = dn.y - actualHeight / 2
           api.updateNode(proj.id, n.id, { x: n.x, y: n.y }).catch(() => {})
         }
       })
 
       regions.forEach(r => {
-        const dr = g.node(r.id)
-        if (dr) {
-          r.x = dr.x - dr.width / 2 + 10
-          r.y = dr.y - dr.height / 2 - 20
-          r.w = dr.width - 20
-          r.h = dr.height + 20
-          api.updateRegion(proj.id, r.id, { x: r.x, y: r.y, w: Math.max(r.w, 200), h: Math.max(r.h, 160) }).catch(() => {})
+        const regionNodes = nodes.filter(nd => nd.regionId === r.id)
+        if (regionNodes.length === 0) {
+          r.w = Math.max(r.w || 300, 300)
+          r.h = Math.max(r.h || 200, 200)
+          api.updateRegion(proj.id, r.id, { x: r.x, y: r.y, w: r.w, h: r.h }).catch(() => {})
+          return
         }
+        
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        regionNodes.forEach(n => {
+          const fieldCount = n.fields ? n.fields.length : 0
+          const actualHeight = 60 + fieldCount * 22
+          const nodeWidth = get().showThreeColumns ? 300 : 220
+          
+          minX = Math.min(minX, n.x)
+          minY = Math.min(minY, n.y)
+          maxX = Math.max(maxX, n.x + nodeWidth)
+          maxY = Math.max(maxY, n.y + actualHeight)
+        })
+        
+        // Add robust padding around the enclosed nodes
+        r.x = minX - 40
+        r.y = minY - 60
+        r.w = (maxX - minX) + 80
+        r.h = (maxY - minY) + 100
+        
+        api.updateRegion(proj.id, r.id, { x: r.x, y: r.y, w: r.w, h: r.h }).catch(() => {})
       })
     }
 

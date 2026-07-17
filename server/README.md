@@ -60,7 +60,7 @@ npm start
       "command": "npx",
       "args": ["-y", "linkweaver"],
       "env": {
-        "REQFLOW_DATA_DIR": "你的本地数据存储路径（例如：D:\\LinkweaverData）"
+        "LINKWEAVER_DATA_DIR": "你的本地数据存储路径（例如：D:\\LinkweaverData）"
       }
     }
   }
@@ -75,7 +75,7 @@ npm start
       "command": "node",
       "args": ["D:\\project\\Workbench\\server\\dist\\index.js"],
       "env": {
-        "REQFLOW_DATA_DIR": "D:\\project\\Workbench\\data"
+        "LINKWEAVER_DATA_DIR": "D:\\project\\Workbench\\data"
       }
     }
   }

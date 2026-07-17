@@ -19,7 +19,7 @@ export class Store {
   private filePath: string;
 
   constructor(dataDir?: string) {
-    this.dataDir = dataDir || path.join(os.homedir(), '.reqflow');
+    this.dataDir = dataDir || path.join(os.homedir(), '.linkweaver');
     this.filePath = path.join(this.dataDir, 'projects.json');
   }
 

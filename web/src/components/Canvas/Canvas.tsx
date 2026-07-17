@@ -222,6 +222,41 @@ export default function Canvas() {
   const activeFlow = project?.businessFlows?.find(f => f.id === activeBusinessFlowId)
   const flowAnimationSpeed = store.flowAnimationSpeed
   const [hoveredFieldInfo, setHoveredFieldInfo] = useState<{ nodeId: string, name: string, ref?: string } | null>(null)
+
+  const highlightedFieldSet = useMemo(() => {
+    const set = new Set<string>()
+    if (!hoveredFieldInfo || !project?.nodes) return set
+
+    const queue: string[] = [`${hoveredFieldInfo.nodeId}.${hoveredFieldInfo.name}`]
+    set.add(queue[0])
+
+    const refMap = new Map<string, string[]>()
+    project.nodes.forEach(node => {
+      node.fields?.forEach(f => {
+        const fieldKey = `${node.id}.${f.name}`
+        if (f.ref) {
+          if (!refMap.has(fieldKey)) refMap.set(fieldKey, [])
+          refMap.get(fieldKey)!.push(f.ref)
+          
+          if (!refMap.has(f.ref)) refMap.set(f.ref, [])
+          refMap.get(f.ref)!.push(fieldKey)
+        }
+      })
+    })
+
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      const neighbors = refMap.get(current) || []
+      for (const next of neighbors) {
+        if (!set.has(next)) {
+          set.add(next)
+          queue.push(next)
+        }
+      }
+    }
+    return set
+  }, [hoveredFieldInfo, project?.nodes])
+
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
   const normalizeFieldName = useCallback((name: string) => name.toLowerCase().replace(/[\s_-]/g, ''), [])
   const selectedNodeIds = store.selectedNodeIds
@@ -1136,10 +1171,13 @@ export default function Canvas() {
               const edgeOpacity = isEdgeActive ? (store.editingBusinessFlowId && !inFlow ? 0.3 : linkingRequirementId && !inReq ? 0.3 : 1) : 0.15
               const isHovered = hoveredEdgeId === edge.id
               
+              const highlightedNodeIds = hoveredFieldInfo ? Array.from(highlightedFieldSet).map(k => k.split('.')[0]) : []
+              const isFieldCascadeActive = hoveredFieldInfo && highlightedNodeIds.includes(edge.sourceId) && highlightedNodeIds.includes(edge.targetId)
+
               let startColor = '#e4e4e7' // zinc-200
               let endColor = '#71717a'   // zinc-500
               
-              if (isHovered) {
+              if (isHovered || isFieldCascadeActive) {
                 startColor = '#a5b4fc' // indigo-300
                 endColor = '#4338ca'   // indigo-700
               } else if (activeRequirement) {
@@ -1157,8 +1195,8 @@ export default function Canvas() {
                 endColor = '#18181b'   // zinc-900
               }
 
-              const strokeWidth = isHovered ? '3' : activeRequirement ? (inReq ? '2.5' : '1') : activeFlow ? (inFlow ? '2.5' : '1') : (isSel ? '2' : '1.5')
-              const opacity = isHovered ? 1 : activeRequirement ? (inReq ? 1 : 0.15) : activeFlow ? (inFlow ? 1 : 0.15) : edgeOpacity
+              const strokeWidth = (isHovered || isFieldCascadeActive) ? '3' : activeRequirement ? (inReq ? '2.5' : '1') : activeFlow ? (inFlow ? '2.5' : '1') : (isSel ? '2' : '1.5')
+              const opacity = (isHovered || isFieldCascadeActive) ? 1 : activeRequirement ? (inReq ? 1 : 0.15) : activeFlow ? (inFlow ? 1 : 0.15) : edgeOpacity
 
               let x1 = points[0].x, y1 = points[0].y
               let x2 = points[points.length - 1].x, y2 = points[points.length - 1].y
@@ -1253,38 +1291,78 @@ export default function Canvas() {
           {/* Render Connection Labels with Overlap Avoidance */}
           {(() => {
             const labelPositions = edges.map((edge) => {
-              const effFrom = getEffectiveRectAndId(edge.sourceId)
-              const effTo = getEffectiveRectAndId(edge.targetId)
-              if (!effFrom || !effTo) return null
-              if (effFrom.id === effTo.id) return null
+              const layout = portLayouts[edge.id]
+              if (!layout || !layout.points || layout.points.length < 2) return null
 
-              const p1 = edge.sourcePort ? portPos(effFrom.rect, edge.sourcePort) : portPos(effFrom.rect, autoPort(effFrom.rect, effTo.rect))
-              const p2 = edge.targetPort ? portPos(effTo.rect, edge.targetPort) : portPos(effTo.rect, autoPort(effTo.rect, effFrom.rect))
-              const mx = (p1.x + p2.x) / 2
-              const my = (p1.y + p2.y) / 2
+              const pts = layout.points
+              let maxLen = -1
+              let bestPt1 = pts[0], bestPt2 = pts[1]
+              
+              for (let i = 0; i < pts.length - 1; i++) {
+                const dx = pts[i+1].x - pts[i].x
+                const dy = pts[i+1].y - pts[i].y
+                const l = Math.sqrt(dx * dx + dy * dy)
+                if (l > maxLen) {
+                  maxLen = l
+                  bestPt1 = pts[i]
+                  bestPt2 = pts[i+1]
+                }
+              }
+
+              const mx = (bestPt1.x + bestPt2.x) / 2
+              const my = (bestPt1.y + bestPt2.y) / 2
               const labelWidth = edge.label.length * 6 + 16
+              
+              const dx = bestPt2.x - bestPt1.x
+              const dy = bestPt2.y - bestPt1.y
+              const len = maxLen
+              
               return {
                 id: edge.id,
                 label: edge.label,
+                cx: mx,
+                cy: my,
                 x: mx,
                 y: my,
                 width: labelWidth,
-                height: 20
+                height: 20,
+                dirX: len > 0 ? dx / len : 1,
+                dirY: len > 0 ? dy / len : 0,
+                shiftStep: 0,
+                maxShift: Math.max(0, (len - labelWidth) / 2 - 5) // max distance it can slide along the edge
               }
             }).filter((item): item is NonNullable<typeof item> => item !== null)
 
             // Dynamic collision resolution loop (always on since React only renders at rest)
-            for (let i = 0; i < labelPositions.length; i++) {
-              for (let j = i + 1; j < labelPositions.length; j++) {
-                const a = labelPositions[i]
-                const b = labelPositions[j]
-                const overlapX = Math.abs(a.x - b.x) < (a.width + b.width) / 2 + 10
-                const overlapY = Math.abs(a.y - b.y) < (a.height + b.height) / 2 + 6
-                if (overlapX && overlapY) {
-                  // Shift the second label downwards to avoid overlapping
-                  b.y += 22
+            for (let iter = 0; iter < 5; iter++) {
+              let hasCollision = false
+              for (let i = 0; i < labelPositions.length; i++) {
+                for (let j = i + 1; j < labelPositions.length; j++) {
+                  const a = labelPositions[i]
+                  const b = labelPositions[j]
+                  const overlapX = Math.abs(a.x - b.x) < (a.width + b.width) / 2 + 10
+                  const overlapY = Math.abs(a.y - b.y) < (a.height + b.height) / 2 + 6
+                  if (overlapX && overlapY) {
+                    hasCollision = true
+                    b.shiftStep += 1
+                    
+                    const direction = b.shiftStep % 2 === 1 ? 1 : -1
+                    const shiftAmount = Math.ceil(b.shiftStep / 2) * 30
+                    
+                    if (shiftAmount <= b.maxShift) {
+                      // Slide along the edge segment
+                      b.x = b.cx + b.dirX * shiftAmount * direction
+                      b.y = b.cy + b.dirY * shiftAmount * direction
+                    } else {
+                      // If the edge segment is completely crowded, shift perpendicularly (normal vector)
+                      const pushOut = (shiftAmount - b.maxShift)
+                      b.x = b.cx + b.dirX * b.maxShift * direction - b.dirY * pushOut
+                      b.y = b.cy + b.dirY * b.maxShift * direction + b.dirX * pushOut
+                    }
+                  }
                 }
               }
+              if (!hasCollision) break
             }
 
             return labelPositions.map((pos) => {
@@ -1294,13 +1372,18 @@ export default function Canvas() {
                 pos.label.toLowerCase().includes(searchQuery)
               ) : activeRequirement ? inReq : selectedNodeIds.length > 0 ? connectedEdgeIds.has(pos.id) : (activeFlow ? inFlow : true)
               const isHovered = hoveredEdgeId === pos.id
-              const labelOpacity = isHovered ? 1 : (isLabelActive ? 1 : 0.15)
+
+              const edgeObj = edges.find(e => e.id === pos.id)
+              const highlightedNodeIds = hoveredFieldInfo ? Array.from(highlightedFieldSet).map(k => k.split('.')[0]) : []
+              const isFieldCascadeActive = hoveredFieldInfo && edgeObj && highlightedNodeIds.includes(edgeObj.sourceId) && highlightedNodeIds.includes(edgeObj.targetId)
+
+              const labelOpacity = (isHovered || isFieldCascadeActive) ? 1 : (isLabelActive ? 1 : 0.15)
               return (
                 <div
                   key={`lbl-${pos.id}`}
                   data-label-id={pos.id}
-                  className={`absolute text-[10px] font-semibold px-2 py-0.5 rounded whitespace-nowrap transition-all duration-200 cursor-pointer pointer-events-auto ${
-                    isHovered ? 'text-indigo-700 bg-indigo-50 border-indigo-300 shadow-md ring-1 ring-indigo-200 z-50' : 'text-zinc-500 bg-white border border-zinc-200/50 shadow-sm z-25'
+                  className={`absolute text-[10px] font-semibold px-2 py-0.5 rounded whitespace-nowrap transition-colors duration-200 cursor-pointer pointer-events-auto ${
+                    (isHovered || isFieldCascadeActive) ? 'text-indigo-700 bg-indigo-50 border-indigo-300 shadow-md ring-1 ring-indigo-200 z-50' : 'text-zinc-500 bg-white border border-zinc-200/50 shadow-sm z-25'
                   }`}
                   style={{
                     left: pos.x - pos.width / 2,
@@ -1361,7 +1444,7 @@ export default function Canvas() {
                     store.selectNode(node.id)
                   }
                 }}
-                className={`node-el absolute z-20 cursor-move bg-white border transition-colors transition-shadow duration-200 rounded-xl p-3.5 min-w-40 flex flex-col group/node hover:ring-2 hover:ring-indigo-400 hover:shadow-lg hover:-translate-y-0.5 ${
+                className={`node-el absolute z-20 cursor-move bg-white border transition-colors transition-shadow duration-200 rounded-xl p-3.5 ${store.showThreeColumns ? 'min-w-[280px]' : 'min-w-56'} flex flex-col group/node hover:ring-2 hover:ring-indigo-400 hover:shadow-lg hover:-translate-y-0.5 ${
                   !isNodeActive ? 'opacity-15 grayscale border-zinc-200 shadow-none' : (
                     activeRequirement ? 'ring-2 ring-purple-500 shadow-md shadow-purple-100/50 border-purple-200 z-30' :
                     activeFlow ? 'ring-2 ring-indigo-500 shadow-md shadow-indigo-100/50 border-indigo-200 z-30' : 'border-zinc-200 shadow-sm'
@@ -1379,11 +1462,7 @@ export default function Canvas() {
               >
               {/* Header & Fields */}
               {(() => {
-                const nodeContainsHoveredField = hoveredFieldInfo && node.fields?.some(f => {
-                  return (node.id === hoveredFieldInfo.nodeId && f.name === hoveredFieldInfo.name) || 
-                         (f.ref === `${hoveredFieldInfo.nodeId}.${hoveredFieldInfo.name}`) ||
-                         (hoveredFieldInfo.ref === `${node.id}.${f.name}`)
-                })
+                const nodeContainsHoveredField = hoveredFieldInfo && node.fields?.some(f => highlightedFieldSet.has(`${node.id}.${f.name}`))
                 return (
                   <>
                     <div className={`flex items-center justify-between pb-2 border-b border-zinc-200/80 mb-1 ${
@@ -1446,37 +1525,40 @@ export default function Canvas() {
                     {!node.collapsedFields && node.fields && node.fields.length > 0 && (
                       <div className="flex flex-col rounded-md overflow-hidden border border-zinc-100">
                         {node.fields.map((f, i) => {
-                          const isHoverMatched = hoveredFieldInfo && (
-                            (node.id === hoveredFieldInfo.nodeId && f.name === hoveredFieldInfo.name) || 
-                            (f.ref === `${hoveredFieldInfo.nodeId}.${hoveredFieldInfo.name}`) ||
-                            (hoveredFieldInfo.ref === `${node.id}.${f.name}`)
-                          )
+                          const isHoverMatched = hoveredFieldInfo && highlightedFieldSet.has(`${node.id}.${f.name}`)
                           return (
                             <div 
                               key={f.name} 
                               onMouseEnter={() => setHoveredFieldInfo({ nodeId: node.id, name: f.name, ref: f.ref })}
                               onMouseLeave={() => setHoveredFieldInfo(null)}
-                              className={`flex items-center justify-between text-[11px] gap-4 px-2 py-1 transition-colors cursor-default ${
+                              className={`grid ${store.showThreeColumns ? 'grid-cols-[4fr_4fr_3fr]' : 'grid-cols-[1fr_auto]'} items-center text-[11px] gap-2 px-2 py-1.5 transition-colors cursor-default ${
                                 isHoverMatched ? 'bg-blue-100 text-blue-900 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.3)]' : (i % 2 === 0 ? 'bg-zinc-50/50' : 'bg-white')
                               }`}
-                              title={`${f.description || ''}${f.default ? `\n默认值: ${f.default}` : ''}`}
+                              title={f.default ? `默认值: ${f.default}` : undefined}
                             >
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
                                 {f.name === 'id' || f.name === '_id' ? (
-                                  <Key size={10} className={isHoverMatched ? "text-blue-600" : "text-amber-500"} />
+                                  <Key size={10} className={`shrink-0 ${isHoverMatched ? "text-blue-600" : "text-amber-500"}`} />
                                 ) : f.ref ? (
-                                  <Link2 size={10} className={isHoverMatched ? "text-blue-600" : "text-indigo-400"} />
+                                  <Link2 size={10} className={`shrink-0 ${isHoverMatched ? "text-blue-600" : "text-indigo-400"}`} />
                                 ) : (
-                                  <div className="w-[10px]" />
+                                  <div className="w-[10px] shrink-0" />
                                 )}
-                                <span className={`font-medium ${isHoverMatched ? 'text-blue-900' : (f.name === 'id' || f.name === '_id' || f.ref ? 'text-zinc-800' : 'text-zinc-600')}`}>
+                                <span className={`font-medium truncate ${isHoverMatched ? 'text-blue-900' : (f.name === 'id' || f.name === '_id' || f.ref ? 'text-zinc-800' : 'text-zinc-600')}`} title={f.name}>
                                   {f.name}
                                 </span>
-                                {f.required && <span className={isHoverMatched ? "text-blue-500 text-[10px]" : "text-rose-500 text-[10px]"}>*</span>}
+                                {f.required && <span className={`shrink-0 ${isHoverMatched ? "text-blue-500 text-[10px]" : "text-rose-500 text-[10px]"}`}>*</span>}
                               </div>
-                              <span className={`${isHoverMatched ? 'text-blue-700' : 'text-zinc-400'} font-mono text-[9px] text-right truncate max-w-[80px]`} title={f.type}>
+
+                              {store.showThreeColumns && (
+                                <div className={`text-[10px] truncate ${isHoverMatched ? 'text-blue-800/80' : 'text-zinc-500'}`} title={f.description}>
+                                  {f.description || <span className="opacity-40">-</span>}
+                                </div>
+                              )}
+
+                              <div className={`${isHoverMatched ? 'text-blue-700' : 'text-zinc-400'} font-mono text-[9px] text-right truncate`} title={f.type}>
                                 {f.type}
-                              </span>
+                              </div>
                             </div>
                           )
                         })}

@@ -17,11 +17,11 @@ export default function Sidebar() {
     <div className="w-64 bg-zinc-50 border-r border-zinc-200/80 p-6 flex flex-col h-full shrink-0 select-none">
       {/* Logo */}
       <div className="flex items-center gap-2.5 mb-8">
-        <div className="w-8 h-8 rounded-lg bg-zinc-900 flex items-center justify-center text-white shadow-sm">
-          <FileCode size={18} className="stroke-[2.25]" />
+        <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)] shrink-0 ring-1 ring-zinc-200/50">
+          <img src="/pwa-192x192.png" alt="Linkweaver Logo" className="w-full h-full object-cover" />
         </div>
         <div className="text-lg font-bold tracking-tight text-zinc-900">
-          ReqFlow<span className="text-zinc-400">.</span>
+          Linkweaver<span className="text-zinc-400">.</span>
         </div>
       </div>
 

@@ -16,12 +16,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function main() {
-  const store = new Store(process.env.REQFLOW_DATA_DIR);
+  const store = new Store(process.env.LINKWEAVER_DATA_DIR);
   await store.init();
 
   // Setup MCP Server
   const server = new Server(
-    { name: 'ReqFlow MCP TS', version: '1.0.0' },
+    { name: 'Linkweaver MCP TS', version: '1.0.0' },
     { capabilities: { tools: {} } }
   );
 
@@ -47,7 +47,7 @@ async function main() {
     });
   });
 
-  const port = process.env.REQFLOW_API_PORT || 8081;
+  const port = process.env.LINKWEAVER_API_PORT || 8081;
 
   app.listen(port, () => {
     // We only reach here if the port was successfully bound

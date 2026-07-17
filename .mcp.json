@@ -2,12 +2,12 @@
   "mcpServers": {
     "linkweaver": {
       "args": [
-        "D:/project/Workbench/server/dist/index.js"
+        "D:\\project\\Workbench\\server\\dist\\index.js"
       ],
       "auto_start": true,
       "command": "node",
       "env": {
-        "REQFLOW_DATA_DIR": "D:\\project\\Workbench\\data"
+        "LINKWEAVER_DATA_DIR": "D:\\project\\Workbench\\data"
       }
     }
   }

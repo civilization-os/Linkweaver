@@ -23,7 +23,10 @@ import {
   Download,
   Sparkles,
   Search,
-  Expand
+  Expand,
+  List,
+  GitMerge,
+  LayoutTemplate
 } from 'lucide-react'
 
 export default function Toolbar() {
@@ -34,6 +37,8 @@ export default function Toolbar() {
   const toggleFlow = useStore(s => s.toggleFlow)
   const showGrid = useStore(s => s.showGrid)
   const toggleGrid = useStore(s => s.toggleGrid)
+  const showThreeColumns = useStore(s => s.showThreeColumns)
+  const toggleThreeColumns = useStore(s => s.toggleThreeColumns)
   const selectedEdgeId = useStore(s => s.selectedEdgeId)
   const project = useStore(s => s.currentProject())
   const resetView = useStore(s => s.resetView)
@@ -83,20 +88,20 @@ export default function Toolbar() {
   }, [showFormatMenu])
 
   const handleExportPNG = async () => {
-    console.log('[ReqFlow] handleExportPNG starting...')
+    console.log('[Linkweaver] handleExportPNG starting...')
     const layer = document.getElementById('canvas-layer')
-    console.log('[ReqFlow] found canvas-layer:', layer)
-    console.log('[ReqFlow] current project:', project)
+    console.log('[Linkweaver] found canvas-layer:', layer)
+    console.log('[Linkweaver] current project:', project)
     if (!layer || !project) {
-      console.warn('[ReqFlow] Export aborted: layer or project is missing')
+      console.warn('[Linkweaver] Export aborted: layer or project is missing')
       return
     }
 
     const nodes = project.nodes
     const regions = project.regions
-    console.log('[ReqFlow] nodes count:', nodes.length, 'regions count:', regions.length)
+    console.log('[Linkweaver] nodes count:', nodes.length, 'regions count:', regions.length)
     if (nodes.length === 0 && regions.length === 0) {
-      console.warn('[ReqFlow] Export aborted: no nodes or regions to export')
+      console.warn('[Linkweaver] Export aborted: no nodes or regions to export')
       return
     }
 
@@ -122,14 +127,14 @@ export default function Toolbar() {
     const y = minY - padding
     const width = (maxX - minX) + 2 * padding
     const height = (maxY - minY) + 2 * padding
-    console.log('[ReqFlow] crop box:', { x, y, width, height })
+    console.log('[Linkweaver] crop box:', { x, y, width, height })
 
     // Hide grid and ports during export
     const gridEl = layer.querySelector('.grid-layer') as HTMLElement
     const ports = layer.querySelectorAll('.port')
     if (gridEl) gridEl.style.display = 'none'
     ports.forEach((p: any) => p.style.display = 'none')
-    console.log('[ReqFlow] temporarily hid grid & ports, initiating domToBlob...')
+    console.log('[Linkweaver] temporarily hid grid & ports, initiating domToBlob...')
 
     try {
       const blob = await domToBlob(layer, {
@@ -143,7 +148,7 @@ export default function Toolbar() {
           top: '0px'
         }
       })
-      console.log('[ReqFlow] domToBlob generated successfully')
+      console.log('[Linkweaver] domToBlob generated successfully')
 
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -154,29 +159,29 @@ export default function Toolbar() {
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
-      console.log('[ReqFlow] PNG download link clicked and URL revoked')
+      console.log('[Linkweaver] PNG download link clicked and URL revoked')
     } catch (err) {
-      console.error('[ReqFlow] Export PNG failed in catch block:', err)
+      console.error('[Linkweaver] Export PNG failed in catch block:', err)
     } finally {
       // Restore grid and ports
       if (gridEl) gridEl.style.display = ''
       ports.forEach((p: any) => p.style.display = '')
-      console.log('[ReqFlow] grid & ports restored')
+      console.log('[Linkweaver] grid & ports restored')
     }
   }
 
   const handleExportGIF = async () => {
-    console.log('[ReqFlow] handleExportGIF starting...')
+    console.log('[Linkweaver] handleExportGIF starting...')
     const layer = document.getElementById('canvas-layer')
     if (!layer || !project) {
-      console.warn('[ReqFlow] Export GIF aborted: layer or project is missing')
+      console.warn('[Linkweaver] Export GIF aborted: layer or project is missing')
       return
     }
 
     const nodes = project.nodes
     const regions = project.regions
     if (nodes.length === 0 && regions.length === 0) {
-      console.warn('[ReqFlow] Export GIF aborted: no nodes or regions to export')
+      console.warn('[Linkweaver] Export GIF aborted: no nodes or regions to export')
       return
     }
 
@@ -202,7 +207,7 @@ export default function Toolbar() {
     const y = minY - padding
     const width = (maxX - minX) + 2 * padding
     const height = (maxY - minY) + 2 * padding
-    console.log('[ReqFlow] crop box:', { x, y, width, height })
+    console.log('[Linkweaver] crop box:', { x, y, width, height })
 
     setIsExportingGIF(true)
     setGifProgress(0)
@@ -223,7 +228,7 @@ export default function Toolbar() {
       const frameCount = 8
       const delay = 100
 
-      console.log('[ReqFlow] starting frame capture loop...')
+      console.log('[Linkweaver] starting frame capture loop...')
       const edgePaths = layer.querySelectorAll('.edge-flow') as NodeListOf<SVGElement>
 
       for (let i = 0; i < frameCount; i++) {
@@ -261,7 +266,7 @@ export default function Toolbar() {
         
         frames.push(dataUrl)
         setGifProgress(Math.round(((i + 1) / frameCount) * 100))
-        console.log(`[ReqFlow] captured frame ${i + 1}/${frameCount}`)
+        console.log(`[Linkweaver] captured frame ${i + 1}/${frameCount}`)
         await new Promise(r => setTimeout(r, delay))
       }
 
@@ -275,7 +280,7 @@ export default function Toolbar() {
         useStore.getState().toggleFlow()
       }
 
-      console.log('[ReqFlow] frames captured, initiating gifshot...')
+      console.log('[Linkweaver] frames captured, initiating gifshot...')
       gifshot.createGIF({
         images: frames,
         interval: 0.1,
@@ -298,24 +303,24 @@ export default function Toolbar() {
             link.click()
             document.body.removeChild(link)
             URL.revokeObjectURL(gifUrl)
-            console.log('[ReqFlow] GIF download link clicked and URL revoked')
+            console.log('[Linkweaver] GIF download link clicked and URL revoked')
           } catch (fetchErr) {
-            console.error('[ReqFlow] Failed to convert GIF dataURL to Blob:', fetchErr)
+            console.error('[Linkweaver] Failed to convert GIF dataURL to Blob:', fetchErr)
           }
         } else {
-          console.error('[ReqFlow] GIF encoding error:', obj.error)
+          console.error('[Linkweaver] GIF encoding error:', obj.error)
         }
         setIsExportingGIF(false)
       })
 
     } catch (err) {
-      console.error('[ReqFlow] Export GIF failed:', err)
+      console.error('[Linkweaver] Export GIF failed:', err)
       setIsExportingGIF(false)
     } finally {
       // Restore grid and ports
       if (gridEl) gridEl.style.display = ''
       ports.forEach((p: any) => p.style.display = '')
-      console.log('[ReqFlow] grid & ports restored')
+      console.log('[Linkweaver] grid & ports restored')
     }
   }
 
@@ -364,7 +369,7 @@ export default function Toolbar() {
   return (
     <div className="relative z-30">
       {/* Main Toolbar */}
-      <div className="flex items-center gap-2.5 px-6 py-3 border-b border-zinc-200 bg-white/85 backdrop-blur-md select-none shrink-0">
+      <div className="flex flex-wrap items-center gap-2.5 px-6 py-3 border-b border-zinc-200 bg-white/85 backdrop-blur-md select-none [&>*]:shrink-0">
         <span className="text-sm font-semibold text-zinc-900 truncate max-w-[200px]">
           {project?.name ?? ''} <span className="font-normal text-zinc-400">· 拓扑流图</span>
         </span>
@@ -468,24 +473,28 @@ export default function Toolbar() {
           </button>
           
           {showFormatMenu && (
-            <div className="absolute right-0 top-[38px] z-50 w-32 bg-white border border-zinc-200 rounded-xl shadow-xl flex flex-col p-1.5 gap-1 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="absolute right-0 top-[38px] z-50 w-44 bg-white/95 backdrop-blur-xl border border-zinc-200/60 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] flex flex-col p-1.5 gap-0.5 animate-in fade-in slide-in-from-top-2 duration-150 ring-1 ring-black/5">
               <button
-                className="flex items-center gap-2 px-2.5 py-2 hover:bg-zinc-100/80 rounded-lg text-xs font-bold text-zinc-800 hover:text-zinc-950 transition-colors cursor-pointer text-left w-full group"
+                className="flex items-center gap-2.5 px-3 py-2 hover:bg-zinc-100/80 rounded-lg text-[13px] font-semibold text-zinc-700 hover:text-zinc-950 transition-all duration-150 cursor-pointer text-left w-full group relative overflow-hidden"
                 onClick={() => {
                   setShowFormatMenu(false)
                   formatCanvas('default')
                 }}
               >
-                <span>默认排版</span>
+                <div className="absolute inset-0 bg-indigo-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+                <GitMerge size={15} className="relative z-10 text-zinc-400 group-hover:text-indigo-600 transition-colors duration-150" />
+                <span className="relative z-10">默认分散排版</span>
               </button>
               <button
-                className="flex items-center gap-2 px-2.5 py-2 hover:bg-zinc-100/80 rounded-lg text-xs font-bold text-zinc-800 hover:text-zinc-950 transition-colors cursor-pointer text-left w-full group"
+                className="flex items-center gap-2.5 px-3 py-2 hover:bg-zinc-100/80 rounded-lg text-[13px] font-semibold text-zinc-700 hover:text-zinc-950 transition-all duration-150 cursor-pointer text-left w-full group relative overflow-hidden"
                 onClick={() => {
                   setShowFormatMenu(false)
                   formatCanvas('rectangle')
                 }}
               >
-                <span>长方形模式</span>
+                <div className="absolute inset-0 bg-indigo-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+                <LayoutTemplate size={15} className="relative z-10 text-zinc-400 group-hover:text-indigo-600 transition-colors duration-150" />
+                <span className="relative z-10">长方形紧凑排版</span>
               </button>
             </div>
           )}
@@ -526,14 +535,14 @@ export default function Toolbar() {
 
         <div className="flex items-center gap-2">
           <button
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0 border ${
               flowAnimation
-                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
-                : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 shadow-sm hover:bg-emerald-100'
+                : 'border-transparent text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 hover:border-zinc-200/50'
             }`}
             onClick={toggleFlow}
           >
-            {flowAnimation ? <Play size={14} className="animate-pulse" /> : <Pause size={14} />}
+            {flowAnimation ? <Play size={14} className="animate-pulse shrink-0" /> : <Pause size={14} className="shrink-0" />}
             <span>流向动画</span>
           </button>
 
@@ -575,6 +584,19 @@ export default function Toolbar() {
         >
           <Grid size={14} />
           <span>显示网格</span>
+        </button>
+
+        <button
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer ${
+            showThreeColumns
+              ? 'bg-zinc-100 text-zinc-900 border border-zinc-200'
+              : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
+          }`}
+          onClick={toggleThreeColumns}
+          title="切换表结构两列/三列视图"
+        >
+          <List size={14} />
+          <span>{showThreeColumns ? '三列视图' : '两列视图'}</span>
         </button>
 
         <div className="relative" ref={exportMenuRef}>
