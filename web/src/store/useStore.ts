@@ -19,6 +19,8 @@ interface AppState {
   flowAnimationSpeed: number
   showGrid: boolean
   showThreeColumns: boolean
+  canvasDensity: 'compact' | 'standard' | 'detail'
+  hoveredRegionId: string | null
   page: 'overview' | 'canvas'
   loading: boolean
   searchQuery: string
@@ -55,6 +57,8 @@ interface AppState {
   setFlowAnimationSpeed: (speed: number) => void
   toggleGrid: () => void
   toggleThreeColumns: () => void
+  setCanvasDensity: (density: 'compact' | 'standard' | 'detail') => void
+  setHoveredRegion: (id: string | null) => void
   moveRegion: (id: string, dx: number, dy: number) => void
   syncNodePos: (id: string) => void
   syncRegionPos: (id: string) => void
@@ -103,6 +107,8 @@ export const useStore = create<AppState>((set, get) => ({
   flowAnimationSpeed: 1000,
   showGrid: true,
   showThreeColumns: true,
+  canvasDensity: 'detail',
+  hoveredRegionId: null,
   page: 'overview',
   loading: true,
   searchQuery: '',
@@ -392,6 +398,8 @@ export const useStore = create<AppState>((set, get) => ({
   setFlowAnimationSpeed: (speed: number) => set({ flowAnimationSpeed: speed }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   toggleThreeColumns: () => set((s) => ({ showThreeColumns: !s.showThreeColumns })),
+  setCanvasDensity: (density) => set({ canvasDensity: density }),
+  setHoveredRegion: (id) => set({ hoveredRegionId: id }),
 
   moveRegion: (id, dx, dy) => {
     const proj = get().projects.find(p => p.id === get().activeProjectId)

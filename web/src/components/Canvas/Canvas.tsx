@@ -269,6 +269,27 @@ export default function Canvas() {
   const [inlineEditNodeId, setInlineEditNodeId] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!activeRequirement || !viewportRef.current) return
+    const reqNodes = nodes.filter(n => (activeRequirement.nodeIds || []).includes(n.id))
+    const reqRegions = regions.filter(r => (activeRequirement.regionIds || []).includes(r.id))
+    if (reqNodes.length === 0 && reqRegions.length === 0) return
+
+    const minX = Math.min(...reqNodes.map(n => n.x), ...reqRegions.map(r => r.x))
+    const minY = Math.min(...reqNodes.map(n => n.y), ...reqRegions.map(r => r.y))
+    const maxX = Math.max(...reqNodes.map(n => n.x + 300), ...reqRegions.map(r => r.x + r.w))
+    const maxY = Math.max(...reqNodes.map(n => n.y + 120 + (n.fields?.length ?? 0) * 22), ...reqRegions.map(r => r.y + r.h))
+    const padding = 180
+    const w = Math.max(maxX - minX + padding * 2, 360)
+    const h = Math.max(maxY - minY + padding * 2, 260)
+    const scale = Math.max(0.25, Math.min(1.25, viewportRef.current.clientWidth / w, viewportRef.current.clientHeight / h))
+    store.setViewport({
+      scale,
+      x: -(minX - padding) * scale + (viewportRef.current.clientWidth - w * scale) / 2,
+      y: -(minY - padding) * scale + (viewportRef.current.clientHeight - h * scale) / 2,
+    })
+  }, [store.selectedRequirementId])
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
 
@@ -1008,7 +1029,7 @@ export default function Canvas() {
   return (
     <>
       <div 
-        className="flex-1 relative overflow-hidden bg-zinc-50/60" 
+        className="canvas-container flex-1 relative overflow-hidden bg-zinc-50/60" 
         ref={viewportRef}
         style={{
           ...(store.showGrid ? {
@@ -1057,6 +1078,7 @@ export default function Canvas() {
             const isRegionInLinkMode = linkingRequirementId && activeRequirement ? (
               (activeRequirement.regionIds || []).includes(r.id)
             ) : false
+            const isRegionHovered = store.hoveredRegionId === r.id
 
             const rx = r.x
             const ry = r.y
@@ -1074,6 +1096,8 @@ export default function Canvas() {
                   isCollapsed ? 'shadow-sm border-double border-4' : 'shadow-none'
                 } ${linkingRequirementId ? 'pointer-events-auto cursor-pointer' : ''} ${
                   isRegionInLinkMode ? 'ring-2 ring-purple-500 bg-purple-50/10' : ''
+                } ${
+                  isRegionHovered ? 'ring-2 ring-zinc-900 ring-offset-2 shadow-lg' : ''
                 }`}
                 data-region={r.id}
                 style={{
@@ -1410,6 +1434,12 @@ export default function Canvas() {
             const r = regions.find(reg => reg.id === node.regionId)
             return !r?.collapsed
           }).map(node => {
+            const density = store.canvasDensity
+            const keyFields = (node.fields ?? []).filter(f => f.keyRole || f.ref || f.required)
+            const displayedFields = density === 'standard' ? (keyFields.length > 0 ? keyFields : (node.fields ?? []).slice(0, 4)) : (node.fields ?? [])
+            const pkCount = (node.fields ?? []).filter(f => f.keyRole === 'primary').length
+            const fkCount = (node.fields ?? []).filter(f => f.keyRole === 'foreign' || f.ref).length
+            const ukCount = (node.fields ?? []).filter(f => f.keyRole === 'unique').length
             const inReq = activeRequirement ? (activeRequirement.nodeIds || []).includes(node.id) : false
             const isNodeActive = searchQuery ? (
               node.label.toLowerCase().includes(searchQuery) ||
@@ -1444,7 +1474,7 @@ export default function Canvas() {
                     store.selectNode(node.id)
                   }
                 }}
-                className={`node-el absolute z-20 cursor-move bg-white border transition-colors transition-shadow duration-200 rounded-xl p-3.5 ${store.showThreeColumns ? 'min-w-[280px]' : 'min-w-56'} flex flex-col group/node hover:ring-2 hover:ring-indigo-400 hover:shadow-lg hover:-translate-y-0.5 ${
+                className={`node-el absolute z-20 cursor-move bg-white border transition-colors transition-shadow duration-200 rounded-xl ${density === 'compact' ? 'p-2.5 min-w-44' : `p-3.5 ${store.showThreeColumns ? 'min-w-[280px]' : 'min-w-56'}`} flex flex-col group/node hover:ring-2 hover:ring-indigo-400 hover:shadow-lg hover:-translate-y-0.5 ${
                   !isNodeActive ? 'opacity-15 grayscale border-zinc-200 shadow-none' : (
                     activeRequirement ? 'ring-2 ring-purple-500 shadow-md shadow-purple-100/50 border-purple-200 z-30' :
                     activeFlow ? 'ring-2 ring-indigo-500 shadow-md shadow-indigo-100/50 border-indigo-200 z-30' : 'border-zinc-200 shadow-sm'
@@ -1465,7 +1495,7 @@ export default function Canvas() {
                 const nodeContainsHoveredField = hoveredFieldInfo && node.fields?.some(f => highlightedFieldSet.has(`${node.id}.${f.name}`))
                 return (
                   <>
-                    <div className={`flex items-center justify-between pb-2 border-b border-zinc-200/80 mb-1 ${
+                    <div className={`flex items-center justify-between ${density === 'compact' ? 'pb-0 border-b-0 mb-0' : 'pb-2 border-b border-zinc-200/80 mb-1'} ${
                       node.collapsedFields && nodeContainsHoveredField ? 'bg-blue-50 rounded-md px-2 -mx-2 ring-1 ring-blue-200 transition-all duration-300' : 'transition-all duration-300'
                     }`}>
                       <div 
@@ -1504,12 +1534,19 @@ export default function Canvas() {
                         )}
                       </div>
                       <div className="flex items-center gap-1">
-                        {node.sublabel && (
+                        {node.sublabel && density !== 'compact' && (
                           <span className="text-[9px] bg-zinc-100 text-zinc-500 font-semibold px-1.5 py-0.5 rounded border border-zinc-200/30">
                             {node.sublabel}
                           </span>
                         )}
-                        {node.fields && node.fields.length > 0 && (
+                        {density === 'compact' && (pkCount > 0 || fkCount > 0 || ukCount > 0) && (
+                          <span className="text-[9px] bg-zinc-100 text-zinc-500 font-semibold px-1.5 py-0.5 rounded border border-zinc-200/30">
+                            {pkCount > 0 && `PK${pkCount} `}
+                            {fkCount > 0 && `FK${fkCount} `}
+                            {ukCount > 0 && `UK${ukCount}`}
+                          </span>
+                        )}
+                        {node.fields && node.fields.length > 0 && density !== 'compact' && (
                           <button 
                             onClick={(e) => { e.stopPropagation(); store.toggleNodeFieldsCollapse(node.id) }}
                             className="p-0.5 hover:bg-zinc-100 rounded text-zinc-400 hover:text-zinc-600 transition-colors cursor-pointer"
@@ -1522,9 +1559,15 @@ export default function Canvas() {
                     </div>
 
                     {/* Fields */}
-                    {!node.collapsedFields && node.fields && node.fields.length > 0 && (
+                    {density === 'standard' && !node.collapsedFields && node.fields && node.fields.length > displayedFields.length && (
+                      <div className="mt-1 text-[9px] font-semibold text-zinc-400">
+                        显示 {displayedFields.length}/{node.fields.length} 个关键字段
+                      </div>
+                    )}
+
+                    {density !== 'compact' && !node.collapsedFields && node.fields && displayedFields.length > 0 && (
                       <div className="flex flex-col rounded-md overflow-hidden border border-zinc-100">
-                        {node.fields.map((f, i) => {
+                        {displayedFields.map((f, i) => {
                           const isHoverMatched = hoveredFieldInfo && highlightedFieldSet.has(`${node.id}.${f.name}`)
                           return (
                             <div 

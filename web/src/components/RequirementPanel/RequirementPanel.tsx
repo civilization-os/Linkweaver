@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
-import { X, Save, Edit3, Trash2, Eye, CircleDashed, Loader2, CheckCircle2, Copy, Check, Link, Maximize2, Minimize2 } from 'lucide-react'
+import { X, Save, Edit3, Trash2, Eye, CircleDashed, Loader2, CheckCircle2, Copy, Check, Link, Maximize2, Minimize2, Crosshair, GitMerge } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -18,6 +18,8 @@ export default function RequirementPanel() {
   const project = useStore(s => s.currentProject())
   const linkingRequirementId = useStore(s => s.linkingRequirementId)
   const setLinkingRequirement = useStore(s => s.setLinkingRequirement)
+  const setViewport = useStore(s => s.setViewport)
+  const addBusinessFlow = useStore(s => s.addBusinessFlow)
   
   const req = project?.requirements?.find(r => r.id === selectedRequirementId)
 
@@ -84,6 +86,41 @@ export default function RequirementPanel() {
         setTimeout(() => setCopiedPreview(false), 2000)
       }
     }
+  }
+
+  const linkedNodeCount = req.nodeIds?.length ?? 0
+  const linkedEdgeCount = req.edgeIds?.length ?? 0
+  const linkedRegionCount = req.regionIds?.length ?? 0
+  const linkedNodes = project?.nodes.filter(n => req.nodeIds?.includes(n.id)) ?? []
+  const linkedRegions = project?.regions.filter(r => req.regionIds?.includes(r.id)) ?? []
+
+  const focusLinkedCanvas = () => {
+    const container = document.querySelector('.canvas-container') as HTMLElement | null
+    if (!container || (!linkedNodes.length && !linkedRegions.length)) return
+    const minX = Math.min(...linkedNodes.map(n => n.x), ...linkedRegions.map(r => r.x))
+    const minY = Math.min(...linkedNodes.map(n => n.y), ...linkedRegions.map(r => r.y))
+    const maxX = Math.max(...linkedNodes.map(n => n.x + 300), ...linkedRegions.map(r => r.x + r.w))
+    const maxY = Math.max(...linkedNodes.map(n => n.y + 120 + (n.fields?.length ?? 0) * 22), ...linkedRegions.map(r => r.y + r.h))
+    const padding = 180
+    const w = Math.max(maxX - minX + padding * 2, 360)
+    const h = Math.max(maxY - minY + padding * 2, 260)
+    const scale = Math.max(0.25, Math.min(1.25, container.clientWidth / w, container.clientHeight / h))
+    setViewport({
+      scale,
+      x: -(minX - padding) * scale + (container.clientWidth - w * scale) / 2,
+      y: -(minY - padding) * scale + (container.clientHeight - h * scale) / 2,
+    })
+  }
+
+  const createFlowFromRequirement = () => {
+    if (!req.nodeIds?.length && !req.edgeIds?.length) return
+    const existingCount = project?.businessFlows?.length ?? 0
+    addBusinessFlow({
+      name: req.title || `需求流程 ${existingCount + 1}`,
+      description: `由需求「${req.title || '未命名需求'}」生成`,
+      nodeIds: req.nodeIds ?? [],
+      edgeIds: req.edgeIds ?? []
+    })
   }
 
   return (
@@ -233,6 +270,44 @@ export default function RequirementPanel() {
         </div>
 
         <div className="min-h-[300px]">
+          <div className="mb-6 rounded-xl border border-zinc-200 bg-zinc-50/70 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">画布覆盖</div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  className="flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[10px] font-bold text-zinc-600 hover:text-zinc-900 disabled:opacity-40"
+                  disabled={!linkedNodeCount && !linkedRegionCount}
+                  onClick={focusLinkedCanvas}
+                >
+                  <Crosshair size={12} />
+                  定位
+                </button>
+                <button
+                  className="flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-1 text-[10px] font-bold text-white hover:bg-zinc-800 disabled:opacity-40"
+                  disabled={!linkedNodeCount && !linkedEdgeCount}
+                  onClick={createFlowFromRequirement}
+                >
+                  <GitMerge size={12} />
+                  生成流程
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5">
+                <div className="text-[10px] font-bold text-zinc-400">区域</div>
+                <div className="text-base font-bold text-zinc-900">{linkedRegionCount}</div>
+              </div>
+              <div className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5">
+                <div className="text-[10px] font-bold text-zinc-400">节点</div>
+                <div className="text-base font-bold text-zinc-900">{linkedNodeCount}</div>
+              </div>
+              <div className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5">
+                <div className="text-[10px] font-bold text-zinc-400">连线</div>
+                <div className="text-base font-bold text-zinc-900">{linkedEdgeCount}</div>
+              </div>
+            </div>
+          </div>
+
           {isEditing ? (
             <div className="flex flex-col h-full gap-4">
               <textarea

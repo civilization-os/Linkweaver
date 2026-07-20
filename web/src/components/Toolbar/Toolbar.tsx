@@ -40,6 +40,8 @@ export default function Toolbar() {
   const toggleGrid = useStore(s => s.toggleGrid)
   const showThreeColumns = useStore(s => s.showThreeColumns)
   const toggleThreeColumns = useStore(s => s.toggleThreeColumns)
+  const canvasDensity = useStore(s => s.canvasDensity)
+  const setCanvasDensity = useStore(s => s.setCanvasDensity)
   const selectedEdgeId = useStore(s => s.selectedEdgeId)
   const project = useStore(s => s.currentProject())
   const resetView = useStore(s => s.resetView)
@@ -576,6 +578,26 @@ export default function Toolbar() {
                 <span className="flex items-center gap-2"><List size={14} className="text-zinc-500" />字段列宽</span>
                 <span className="text-[10px] text-zinc-400">{showThreeColumns ? '三列' : '两列'}</span>
               </button>
+              <div className="px-2.5 py-2 border-y border-zinc-100">
+                <div className="mb-1.5 text-[10px] font-bold text-zinc-400">画布密度</div>
+                <div className="grid grid-cols-3 gap-1 rounded-lg bg-zinc-100 p-1">
+                  {[
+                    { value: 'compact', label: '简洁' },
+                    { value: 'standard', label: '标准' },
+                    { value: 'detail', label: '详细' },
+                  ].map(item => (
+                    <button
+                      key={item.value}
+                      className={`rounded-md px-2 py-1 text-[10px] font-bold transition-colors ${
+                        canvasDensity === item.value ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-800'
+                      }`}
+                      onClick={() => setCanvasDensity(item.value as 'compact' | 'standard' | 'detail')}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button
                 className="flex items-center gap-2 px-2.5 py-2 hover:bg-zinc-100/80 rounded-lg text-xs font-bold text-zinc-800 transition-colors cursor-pointer text-left w-full"
                 onClick={() => syncCurrentProject()}

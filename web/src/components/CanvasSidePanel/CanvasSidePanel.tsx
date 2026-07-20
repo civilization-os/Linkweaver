@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../../store/useStore'
 import type { FlowNode } from '../../types'
 import EntityEditor from '../EntityEditor/EntityEditor'
-import { Plus, X, Box, Layers, GitMerge, Edit3, Check, Trash2, KeyRound, Link2, BadgeCheck } from 'lucide-react'
+import { Plus, X, Box, Layers, GitMerge, Edit3, Check, Trash2, KeyRound, Link2, BadgeCheck, Crosshair } from 'lucide-react'
 
 export default function CanvasSidePanel() {
   const project = useStore(s => s.currentProject())
@@ -13,6 +13,7 @@ export default function CanvasSidePanel() {
   const editingBusinessFlowId = useStore(s => s.editingBusinessFlowId)
   const selectBusinessFlow = useStore(s => s.selectBusinessFlow)
   const setViewport = useStore(s => s.setViewport)
+  const setHoveredRegion = useStore(s => s.setHoveredRegion)
   const addBusinessFlow = useStore(s => s.addBusinessFlow)
   const deleteBusinessFlow = useStore(s => s.deleteBusinessFlow)
   const setEditingBusinessFlow = useStore(s => s.setEditingBusinessFlow)
@@ -40,6 +41,14 @@ export default function CanvasSidePanel() {
     const target = project.nodes.find(n => n.id === nodeId)
     return target ? `${target.label}.${fieldName ?? ''}` : ref
   }
+  const refLinks = selectedNode ? {
+    outgoing: selectedFields
+      .filter(f => f.ref)
+      .map(f => ({ from: `${selectedNode.label}.${f.name}`, to: resolveRef(f.ref) })),
+    incoming: project.nodes.flatMap(n => (n.fields ?? [])
+      .filter(f => f.ref?.startsWith(`${selectedNode.id}.`))
+      .map(f => ({ from: `${n.label}.${f.name}`, to: resolveRef(f.ref) })))
+  } : { outgoing: [], incoming: [] }
   const focusNodes = (nodeIds: string[]) => {
     const targetNodes = project.nodes.filter(n => nodeIds.includes(n.id))
     if (targetNodes.length === 0) return
@@ -57,6 +66,21 @@ export default function CanvasSidePanel() {
       scale,
       x: -(minX - padding) * scale + (container.clientWidth - w * scale) / 2,
       y: -(minY - padding) * scale + (container.clientHeight - h * scale) / 2,
+    })
+  }
+  const focusRegion = (regionId: string) => {
+    const region = project.regions.find(r => r.id === regionId)
+    if (!region) return
+    const container = document.querySelector('.canvas-container') as HTMLElement | null
+    if (!container) return
+    const padding = 180
+    const w = Math.max(region.w + padding * 2, 360)
+    const h = Math.max(region.h + padding * 2, 260)
+    const scale = Math.max(0.25, Math.min(1.35, container.clientWidth / w, container.clientHeight / h))
+    setViewport({
+      scale,
+      x: -(region.x - padding) * scale + (container.clientWidth - w * scale) / 2,
+      y: -(region.y - padding) * scale + (container.clientHeight - h * scale) / 2,
     })
   }
 
@@ -98,6 +122,24 @@ export default function CanvasSidePanel() {
                 <X size={14} />
               </button>
             </div>
+
+            {(refLinks.outgoing.length > 0 || refLinks.incoming.length > 0) && (
+              <div className="rounded-lg border border-zinc-200 bg-white p-2">
+                <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                  <Link2 size={11} />
+                  <span>显式引用链路</span>
+                </div>
+                <div className="space-y-1.5">
+                  {[...refLinks.outgoing, ...refLinks.incoming].slice(0, 6).map((link, idx) => (
+                    <div key={`${link.from}-${link.to}-${idx}`} className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 text-[10px]">
+                      <span className="truncate text-zinc-600" title={link.from}>{link.from}</span>
+                      <span className="text-indigo-400">→</span>
+                      <span className="truncate font-semibold text-zinc-800" title={link.to}>{link.to}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-3 gap-1.5">
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5">
@@ -231,7 +273,11 @@ export default function CanvasSidePanel() {
               return (
                 <div
                   key={r.id}
-                  className="flex items-center justify-between p-2 border border-zinc-200/50 rounded-xl hover:bg-zinc-50 transition-colors"
+                  className="group flex items-center justify-between p-2 border border-zinc-200/50 rounded-xl hover:bg-zinc-50 hover:border-zinc-300 transition-colors cursor-pointer"
+                  onMouseEnter={() => setHoveredRegion(r.id)}
+                  onMouseLeave={() => setHoveredRegion(null)}
+                  onClick={() => focusRegion(r.id)}
+                  title="定位到该区域"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <div
@@ -243,6 +289,7 @@ export default function CanvasSidePanel() {
                   <span className="text-[10px] font-bold text-zinc-400 bg-zinc-50 px-2 py-0.5 rounded border border-zinc-200/40">
                     {count}
                   </span>
+                  <Crosshair size={11} className="hidden text-zinc-400 group-hover:block" />
                 </div>
               )
             })}
