@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
+import { Crosshair, Maximize2 } from 'lucide-react'
 
 export default function MiniMap() {
   const store = useStore()
@@ -7,6 +8,7 @@ export default function MiniMap() {
   const nodes = project?.nodes || []
   const regions = project?.regions || []
   const viewport = store.viewport
+  const activeFlow = project?.businessFlows?.find(f => f.id === store.activeBusinessFlowId)
 
   const mapW = 200
   const mapH = 150
@@ -139,12 +141,66 @@ export default function MiniMap() {
     }
   }
 
+  const focusBounds = (targetNodes = nodes, targetRegions = regions) => {
+    if (targetNodes.length === 0 && targetRegions.length === 0) return
+    const minX = Math.min(
+      ...targetNodes.map(n => n.x),
+      ...targetRegions.map(r => r.x)
+    )
+    const minY = Math.min(
+      ...targetNodes.map(n => n.y),
+      ...targetRegions.map(r => r.y)
+    )
+    const maxX = Math.max(
+      ...targetNodes.map(n => n.x + 300),
+      ...targetRegions.map(r => r.x + r.w)
+    )
+    const maxY = Math.max(
+      ...targetNodes.map(n => n.y + 120 + (n.fields?.length ?? 0) * 22),
+      ...targetRegions.map(r => r.y + r.h)
+    )
+    const padding = 180
+    const w = Math.max(maxX - minX + padding * 2, 320)
+    const h = Math.max(maxY - minY + padding * 2, 240)
+    const nextScale = Math.max(0.25, Math.min(1.35, containerSize.w / w, containerSize.h / h))
+    store.setViewport({
+      scale: nextScale,
+      x: -(minX - padding) * nextScale + (containerSize.w - w * nextScale) / 2,
+      y: -(minY - padding) * nextScale + (containerSize.h - h * nextScale) / 2
+    })
+  }
+
+  const focusActiveFlow = () => {
+    if (!activeFlow) return
+    const flowNodes = nodes.filter(n => activeFlow.nodeIds.includes(n.id))
+    focusBounds(flowNodes, [])
+  }
+
   return (
     <div 
       className="absolute bottom-4 left-4 z-50 bg-white/90 backdrop-blur border border-zinc-200 shadow-xl rounded-lg overflow-hidden group"
       style={{ width: mapW, height: mapH }}
     >
       <div className="text-[10px] font-bold tracking-widest uppercase text-zinc-400 absolute top-1.5 left-2 pointer-events-none z-10 opacity-50 group-hover:opacity-100 transition-opacity">Map</div>
+      <div className="absolute right-1.5 top-1.5 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          className="flex h-5 w-5 items-center justify-center rounded border border-zinc-200 bg-white/90 text-zinc-500 hover:text-zinc-900"
+          title="适配全部"
+          onMouseDown={e => e.stopPropagation()}
+          onClick={() => focusBounds()}
+        >
+          <Maximize2 size={11} />
+        </button>
+        <button
+          className="flex h-5 w-5 items-center justify-center rounded border border-zinc-200 bg-white/90 text-zinc-500 hover:text-indigo-700 disabled:opacity-40"
+          title="定位当前业务流程"
+          disabled={!activeFlow}
+          onMouseDown={e => e.stopPropagation()}
+          onClick={focusActiveFlow}
+        >
+          <Crosshair size={11} />
+        </button>
+      </div>
       
       <div 
         ref={containerRef}

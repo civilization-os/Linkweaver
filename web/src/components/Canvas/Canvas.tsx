@@ -1537,16 +1537,26 @@ export default function Canvas() {
                               title={f.default ? `默认值: ${f.default}` : undefined}
                             >
                               <div className="flex items-center gap-1.5 min-w-0">
-                                {f.name === 'id' || f.name === '_id' ? (
+                                {f.keyRole === 'primary' ? (
                                   <Key size={10} className={`shrink-0 ${isHoverMatched ? "text-blue-600" : "text-amber-500"}`} />
-                                ) : f.ref ? (
+                                ) : f.keyRole === 'foreign' || f.ref ? (
                                   <Link2 size={10} className={`shrink-0 ${isHoverMatched ? "text-blue-600" : "text-indigo-400"}`} />
+                                ) : f.keyRole === 'unique' ? (
+                                  <Key size={10} className={`shrink-0 ${isHoverMatched ? "text-blue-600" : "text-emerald-500"}`} />
                                 ) : (
                                   <div className="w-[10px] shrink-0" />
                                 )}
-                                <span className={`font-medium truncate ${isHoverMatched ? 'text-blue-900' : (f.name === 'id' || f.name === '_id' || f.ref ? 'text-zinc-800' : 'text-zinc-600')}`} title={f.name}>
+                                <span className={`font-medium truncate ${isHoverMatched ? 'text-blue-900' : (f.keyRole || f.ref ? 'text-zinc-800' : 'text-zinc-600')}`} title={f.name}>
                                   {f.name}
                                 </span>
+                                {f.keyRole && (
+                                  <span className={`shrink-0 rounded px-1 py-px text-[8px] font-bold leading-none ${
+                                    f.keyRole === 'primary' ? 'bg-amber-100 text-amber-700' :
+                                    f.keyRole === 'foreign' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'
+                                  }`}>
+                                    {f.keyRole === 'primary' ? 'PK' : f.keyRole === 'foreign' ? 'FK' : 'UK'}
+                                  </span>
+                                )}
                                 {f.required && <span className={`shrink-0 ${isHoverMatched ? "text-blue-500 text-[10px]" : "text-rose-500 text-[10px]"}`}>*</span>}
                               </div>
 

@@ -5,6 +5,7 @@ export interface Field {
   default?: string;
   description?: string;
   ref?: string;
+  keyRole?: 'primary' | 'foreign' | 'unique';
 }
 
 export interface FlowNode {

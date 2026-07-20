@@ -7,6 +7,28 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { Store } from './store.js';
 
+const FIELD_SCHEMA = {
+  type: 'object',
+  properties: {
+    name: { type: 'string', description: 'Field name' },
+    type: { type: 'string', description: 'string|int|float|bool|datetime|ref|array|enum' },
+    primitiveType: { type: 'string', description: 'Optional logical primitive type' },
+    keyRole: {
+      type: 'string',
+      enum: ['primary', 'foreign', 'unique'],
+      description: 'Explicit field semantic role: primary=PK, foreign=FK, unique=UK. Do not infer from field names such as id, user_id, *_id, or same-name fields.'
+    },
+    ref: {
+      type: 'string',
+      description: 'Explicit referenced target for relationship fields, formatted as entityId.fieldName. Only set when the user/spec confirms the relationship.'
+    },
+    required: { type: 'boolean' },
+    default: { type: 'string' },
+    description: { type: 'string' }
+  },
+  required: ['name', 'type']
+};
+
 export function setupMcp(server: Server, store: Store) {
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
@@ -82,14 +104,15 @@ export function setupMcp(server: Server, store: Store) {
         },
         {
           name: 'create_entity',
-          description: 'Create a new data entity in a project',
+          description: 'Create a new data entity in a project. Field key semantics must be explicit: use keyRole for PK/FK/UK and ref for confirmed relationships. Never mark a field as a key only because its name is id, *_id, or matches another field name.',
           inputSchema: {
             type: 'object',
             properties: {
               project_id: { type: 'string' },
               name: { type: 'string' },
               type: { type: 'string', description: 'entity|actor|process|nested' },
-              fields: { type: 'array', items: { type: 'object' }, description: 'Fields array' },
+              fields: { type: 'array', items: FIELD_SCHEMA, description: 'Fields array. Each key role and relationship reference must be explicitly supplied, not inferred.' },
+              fields_json: { type: 'string', description: 'JSON string of fields using the same schema as fields.' },
               x: { type: 'number', description: 'X coordinate' },
               y: { type: 'number', description: 'Y coordinate' },
               regionId: { type: 'string', description: 'Optional region ID' }
@@ -99,7 +122,7 @@ export function setupMcp(server: Server, store: Store) {
         },
         {
           name: 'update_entity',
-          description: 'Update a data entity in a project',
+          description: 'Update a data entity in a project. Field key semantics must be explicit: use keyRole for PK/FK/UK and ref for confirmed relationships. Never mark a field as a key only because its name is id, *_id, or matches another field name.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -107,7 +130,8 @@ export function setupMcp(server: Server, store: Store) {
               entity_id: { type: 'string' },
               name: { type: 'string' },
               type: { type: 'string', description: 'entity|actor|process|nested' },
-              fields: { type: 'array', items: { type: 'object' }, description: 'Fields array' },
+              fields: { type: 'array', items: FIELD_SCHEMA, description: 'Fields array. Each key role and relationship reference must be explicitly supplied, not inferred.' },
+              fields_json: { type: 'string', description: 'JSON string of fields using the same schema as fields.' },
               x: { type: 'number', description: 'X coordinate' },
               y: { type: 'number', description: 'Y coordinate' },
               regionId: { type: 'string', description: 'Optional region ID' }

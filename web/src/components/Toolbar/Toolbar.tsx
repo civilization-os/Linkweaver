@@ -26,7 +26,8 @@ import {
   Expand,
   List,
   GitMerge,
-  LayoutTemplate
+  LayoutTemplate,
+  MoreHorizontal
 } from 'lucide-react'
 
 export default function Toolbar() {
@@ -56,25 +57,10 @@ export default function Toolbar() {
 
   const [isExportingGIF, setIsExportingGIF] = useState(false)
   const [gifProgress, setGifProgress] = useState(0)
-  const [showExportMenu, setShowExportMenu] = useState(false)
-  const exportMenuRef = useRef<HTMLDivElement>(null)
   const [showFormatMenu, setShowFormatMenu] = useState(false)
   const formatMenuRef = useRef<HTMLDivElement>(null)
-
-
-
-  // Close export menu on outside click
-  useEffect(() => {
-    if (!showExportMenu) return
-    const onClick = (e: MouseEvent) => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
-        setShowExportMenu(false)
-      }
-    }
-    document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
-  }, [showExportMenu])
-
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
   // Close format menu on outside click
   useEffect(() => {
     if (!showFormatMenu) return
@@ -86,6 +72,17 @@ export default function Toolbar() {
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
   }, [showFormatMenu])
+
+  useEffect(() => {
+    if (!showMoreMenu) return
+    const onClick = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [showMoreMenu])
 
   const handleExportPNG = async () => {
     console.log('[Linkweaver] handleExportPNG starting...')
@@ -331,6 +328,8 @@ export default function Toolbar() {
   const nodes = project?.nodes ?? []
   const edges = project?.edges ?? []
   const regions = project?.regions ?? []
+  const activeBusinessFlowId = useStore(s => s.activeBusinessFlowId)
+  const activeBusinessFlow = project?.businessFlows?.find(f => f.id === activeBusinessFlowId)
   const allCollapsed = regions.length > 0 && regions.every(r => r.collapsed)
   const selectedLabel = selectedEdgeId !== null ? edges.find(e => e.id === selectedEdgeId)?.label : ''
 
@@ -366,6 +365,15 @@ export default function Toolbar() {
     addRegion(region)
   }
 
+  const handleResetView = () => {
+    resetView()
+    const l = document.getElementById('canvas-layer')
+    if (l) {
+      l.style.left = '0px'
+      l.style.top = '0px'
+    }
+  }
+
   return (
     <div className="relative z-30">
       {/* Main Toolbar */}
@@ -373,6 +381,13 @@ export default function Toolbar() {
         <span className="text-sm font-semibold text-zinc-900 truncate max-w-[200px]">
           {project?.name ?? ''} <span className="font-normal text-zinc-400">· 拓扑流图</span>
         </span>
+        {activeBusinessFlow && (
+          <span className="flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700 max-w-[220px]">
+            <GitMerge size={12} className="shrink-0" />
+            <span className="truncate">{activeBusinessFlow.name}</span>
+            <span className="shrink-0 text-indigo-400">{activeBusinessFlow.nodeIds.length}/{activeBusinessFlow.edgeIds.length}</span>
+          </span>
+        )}
         
         <div className="w-px h-4 bg-zinc-200 mx-1.5" />
 
@@ -417,14 +432,7 @@ export default function Toolbar() {
 
         <button
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 transition-all duration-150 cursor-pointer"
-          onClick={() => {
-            resetView()
-            const l = document.getElementById('canvas-layer')
-            if (l) {
-              l.style.left = '0px'
-              l.style.top = '0px'
-            }
-          }}
+          onClick={handleResetView}
         >
           <Maximize2 size={14} />
           <span>重置视图</span>
@@ -513,107 +521,73 @@ export default function Toolbar() {
           <span>专注模式</span>
         </button>
 
-        <div className="flex items-center gap-2 select-none px-1.5" title={allCollapsed ? "展开所有服务区域" : "折叠所有服务区域"}>
-          <span className="text-xs font-semibold text-zinc-600">一键折叠</span>
-          <button
-            role="switch"
-            aria-checked={allCollapsed}
-            onClick={() => toggleAllRegionsCollapse(!allCollapsed)}
-            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus:outline-none ${
-              allCollapsed ? 'bg-zinc-900' : 'bg-zinc-200'
-            }`}
-          >
-            <span
-              className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                allCollapsed ? 'translate-x-[18px]' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
-        </div>
-
-        <div className="w-px h-4 bg-zinc-200 mx-1.5" />
-
-        <div className="flex items-center gap-2">
-          <button
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0 border ${
-              flowAnimation
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 shadow-sm hover:bg-emerald-100'
-                : 'border-transparent text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 hover:border-zinc-200/50'
-            }`}
-            onClick={toggleFlow}
-          >
-            {flowAnimation ? <Play size={14} className="animate-pulse shrink-0" /> : <Pause size={14} className="shrink-0" />}
-            <span>流向动画</span>
-          </button>
-
-          {flowAnimation && (
-            <div className="flex items-center gap-2 px-2 py-1 bg-zinc-50 rounded-lg border border-zinc-100 animate-in fade-in slide-in-from-left-2 duration-200">
-              <span className="text-[10px] text-zinc-400 font-medium select-none">播放间隔:</span>
-              <input
-                type="range"
-                min="200"
-                max="2000"
-                step="100"
-                value={flowAnimationSpeed}
-                onChange={(e) => setFlowAnimationSpeed(Number(e.target.value))}
-                className="w-16 h-1 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-600 transition-colors"
-                title="数值越小流动越快"
-              />
-              <span className="text-[9px] text-zinc-500 font-bold w-12 text-right">{flowAnimationSpeed}ms</span>
-            </div>
-          )}
-        </div>
-
-        <button
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 transition-all duration-150 cursor-pointer"
-          onClick={() => syncCurrentProject()}
-        >
-          <RefreshCw size={14} />
-          <span>同步</span>
-        </button>
-
-        <div className="w-px h-4 bg-zinc-200 mx-1.5" />
-
-        <button
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer ${
-            showGrid
-              ? 'bg-zinc-100 text-zinc-900 border border-zinc-200'
-              : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
-          }`}
-          onClick={toggleGrid}
-        >
-          <Grid size={14} />
-          <span>显示网格</span>
-        </button>
-
-        <button
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer ${
-            showThreeColumns
-              ? 'bg-zinc-100 text-zinc-900 border border-zinc-200'
-              : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
-          }`}
-          onClick={toggleThreeColumns}
-          title="切换表结构两列/三列视图"
-        >
-          <List size={14} />
-          <span>{showThreeColumns ? '三列视图' : '两列视图'}</span>
-        </button>
-
-        <div className="relative" ref={exportMenuRef}>
+        <div className="relative" ref={moreMenuRef}>
           <button
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 transition-all duration-150 cursor-pointer"
-            onClick={() => setShowExportMenu(!showExportMenu)}
+            onClick={() => setShowMoreMenu(!showMoreMenu)}
           >
-            <Download size={14} />
-            <span>导出</span>
+            <MoreHorizontal size={14} />
+            <span>更多</span>
           </button>
-          
-          {showExportMenu && (
-            <div className="absolute right-0 top-[38px] z-50 w-36 bg-white border border-zinc-200 rounded-xl shadow-xl flex flex-col p-1.5 gap-1 animate-in fade-in slide-in-from-top-2 duration-150">
+
+          {showMoreMenu && (
+            <div className="absolute right-0 top-[38px] z-50 w-56 bg-white border border-zinc-200 rounded-xl shadow-xl flex flex-col p-1.5 gap-1 animate-in fade-in slide-in-from-top-2 duration-150">
+              <button
+                className="flex items-center justify-between gap-2 px-2.5 py-2 hover:bg-zinc-100/80 rounded-lg text-xs font-bold text-zinc-800 transition-colors cursor-pointer text-left w-full"
+                onClick={() => toggleAllRegionsCollapse(!allCollapsed)}
+              >
+                <span className="flex items-center gap-2"><Layers size={14} className="text-zinc-500" />{allCollapsed ? '展开所有区域' : '折叠所有区域'}</span>
+              </button>
+              <button
+                className="flex items-center justify-between gap-2 px-2.5 py-2 hover:bg-zinc-100/80 rounded-lg text-xs font-bold text-zinc-800 transition-colors cursor-pointer text-left w-full"
+                onClick={toggleFlow}
+              >
+                <span className="flex items-center gap-2">{flowAnimation ? <Play size={14} className="text-emerald-600" /> : <Pause size={14} className="text-zinc-500" />}流向动画</span>
+                <span className="text-[10px] text-zinc-400">{flowAnimation ? '开' : '关'}</span>
+              </button>
+              {flowAnimation && (
+                <div className="px-2.5 py-2 border-y border-zinc-100">
+                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-bold text-zinc-400">
+                    <span>播放间隔</span>
+                    <span>{flowAnimationSpeed}ms</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="200"
+                    max="2000"
+                    step="100"
+                    value={flowAnimationSpeed}
+                    onChange={(e) => setFlowAnimationSpeed(Number(e.target.value))}
+                    className="w-full h-1 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  />
+                </div>
+              )}
+              <button
+                className="flex items-center justify-between gap-2 px-2.5 py-2 hover:bg-zinc-100/80 rounded-lg text-xs font-bold text-zinc-800 transition-colors cursor-pointer text-left w-full"
+                onClick={toggleGrid}
+              >
+                <span className="flex items-center gap-2"><Grid size={14} className="text-zinc-500" />显示网格</span>
+                <span className="text-[10px] text-zinc-400">{showGrid ? '开' : '关'}</span>
+              </button>
+              <button
+                className="flex items-center justify-between gap-2 px-2.5 py-2 hover:bg-zinc-100/80 rounded-lg text-xs font-bold text-zinc-800 transition-colors cursor-pointer text-left w-full"
+                onClick={toggleThreeColumns}
+              >
+                <span className="flex items-center gap-2"><List size={14} className="text-zinc-500" />字段列宽</span>
+                <span className="text-[10px] text-zinc-400">{showThreeColumns ? '三列' : '两列'}</span>
+              </button>
+              <button
+                className="flex items-center gap-2 px-2.5 py-2 hover:bg-zinc-100/80 rounded-lg text-xs font-bold text-zinc-800 transition-colors cursor-pointer text-left w-full"
+                onClick={() => syncCurrentProject()}
+              >
+                <RefreshCw size={14} className="text-zinc-500" />
+                <span>同步</span>
+              </button>
+              <div className="h-px bg-zinc-100 my-1" />
               <button
                 className="flex items-center gap-2 px-2.5 py-2 hover:bg-zinc-100/80 rounded-lg text-xs font-bold text-zinc-800 hover:text-zinc-950 transition-colors cursor-pointer text-left w-full group"
                 onClick={() => {
-                  setShowExportMenu(false)
+                  setShowMoreMenu(false)
                   handleExportPNG()
                 }}
               >
@@ -623,7 +597,7 @@ export default function Toolbar() {
               <button
                 className="flex items-center gap-2 px-2.5 py-2 hover:bg-zinc-100/80 rounded-lg text-xs font-bold text-zinc-800 hover:text-zinc-950 transition-colors cursor-pointer text-left w-full group"
                 onClick={() => {
-                  setShowExportMenu(false)
+                  setShowMoreMenu(false)
                   handleExportGIF()
                 }}
               >

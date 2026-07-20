@@ -15,6 +15,8 @@ export interface Field {
   required?: boolean
   default?: string
   description?: string
+  /** Explicit schema semantics — never inferred from the field name. */
+  keyRole?: 'primary' | 'foreign' | 'unique'
 }
 
 
@@ -101,4 +103,3 @@ export interface ViewportState {
   y: number
   scale: number
 }
-

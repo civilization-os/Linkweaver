@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { FlowNode, Field } from '../../types'
 import { useStore } from '../../store/useStore'
-import { X, Plus, Trash2, GripVertical } from 'lucide-react'
+import { X, Plus, Trash2, GripVertical, KeyRound, Link2, BadgeCheck } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -26,6 +26,12 @@ interface Props {
 }
 
 const FIELD_TYPES = ['string', 'int', 'float', 'bool', 'datetime', 'ref', 'array', 'enum']
+const KEY_ROLES = [
+  { value: '', label: '普通字段' },
+  { value: 'primary', label: '主键 PK' },
+  { value: 'foreign', label: '外键 FK' },
+  { value: 'unique', label: '业务唯一键 UK' },
+] as const
 
 type EditField = Field & { _id: string }
 
@@ -59,7 +65,7 @@ function SortableFieldItem({
     <div 
       ref={setNodeRef} 
       style={style} 
-      className={`flex items-center gap-2 bg-zinc-50 p-2 rounded-lg border transition-all ${isDragging ? 'opacity-50 border-indigo-400 shadow-sm' : 'border-zinc-200/50'}`}
+      className={`flex flex-wrap items-center gap-2 bg-zinc-50 p-2 rounded-lg border transition-all ${isDragging ? 'opacity-50 border-indigo-400 shadow-sm' : 'border-zinc-200/50'}`}
     >
       <div 
         {...attributes} 
@@ -81,9 +87,21 @@ function SortableFieldItem({
       >
         {FIELD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
       </select>
-      {f.type === 'ref' && (
+      <select
+        aria-label={`${f.name || '字段'}键类型`}
+        className={`w-[108px] px-1 py-1.5 text-[11px] bg-white border rounded-md outline-none transition-all ${
+          f.keyRole === 'primary' ? 'border-amber-300 text-amber-800 bg-amber-50' :
+          f.keyRole === 'foreign' ? 'border-indigo-200 text-indigo-700 bg-indigo-50' :
+          f.keyRole === 'unique' ? 'border-emerald-200 text-emerald-700 bg-emerald-50' : 'border-zinc-200 focus:border-zinc-900'
+        }`}
+        value={f.keyRole || ''}
+        onChange={e => handleFieldChange(i, 'keyRole', e.target.value)}
+      >
+        {KEY_ROLES.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
+      </select>
+      {(f.type === 'ref' || f.keyRole === 'foreign') && (
         <select
-          className="w-24 px-1 py-1.5 text-[11px] bg-white border border-zinc-200 rounded-md outline-none focus:border-zinc-900 transition-all"
+          className="w-28 px-1 py-1.5 text-[11px] bg-white border border-zinc-200 rounded-md outline-none focus:border-zinc-900 transition-all"
           value={f.ref || ''}
           onChange={e => handleFieldChange(i, 'ref', e.target.value)}
         >
@@ -103,7 +121,7 @@ function SortableFieldItem({
         </select>
       )}
       <input
-        className="flex-1 min-w-0 px-2 py-1.5 text-xs bg-white border border-zinc-200 rounded-md outline-none focus:border-zinc-900 transition-all"
+        className="flex-1 min-w-[150px] px-2 py-1.5 text-xs bg-white border border-zinc-200 rounded-md outline-none focus:border-zinc-900 transition-all"
         value={f.description ?? ''}
         onChange={e => handleFieldChange(i, 'description', e.target.value)}
         placeholder="描述（可选）"
@@ -211,7 +229,12 @@ export default function EntityEditor({ onClose, editNode }: Props) {
         </div>
 
         {/* Body */}
-        <div className="p-5 overflow-y-auto space-y-4">
+      <div className="p-5 overflow-y-auto space-y-4">
+          <div className="grid grid-cols-3 gap-2 rounded-xl border border-zinc-100 bg-zinc-50/80 p-2.5 text-[10px] leading-relaxed text-zinc-500">
+            <div className="flex gap-1.5"><KeyRound size={13} className="mt-0.5 shrink-0 text-amber-600" /><span><b className="text-zinc-700">PK</b> 显式标注身份字段</span></div>
+            <div className="flex gap-1.5"><Link2 size={13} className="mt-0.5 shrink-0 text-indigo-600" /><span><b className="text-zinc-700">FK</b> 手动选择引用目标</span></div>
+            <div className="flex gap-1.5"><BadgeCheck size={13} className="mt-0.5 shrink-0 text-emerald-600" /><span><b className="text-zinc-700">UK</b> 标记业务唯一键</span></div>
+          </div>
           <div className="flex items-center gap-3">
             <label className="text-xs font-semibold text-zinc-400 w-12 shrink-0">名称</label>
             <input
@@ -237,7 +260,10 @@ export default function EntityEditor({ onClose, editNode }: Props) {
           </div>
 
           <div className="pt-2 border-t border-zinc-100">
-            <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-3">字段配置</div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">字段配置</div>
+              <span className="text-[10px] text-zinc-400">键属性完全由你确认，不做 AI 推测</span>
+            </div>
             
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               <DndContext 
@@ -292,4 +318,3 @@ export default function EntityEditor({ onClose, editNode }: Props) {
     </div>
   )
 }
-

@@ -1,18 +1,23 @@
 import { useState } from 'react'
 import { useStore } from '../../store/useStore'
+import type { FlowNode } from '../../types'
 import EntityEditor from '../EntityEditor/EntityEditor'
-import { Plus, X, Box, Layers, GitMerge, Edit3, Check, Trash2 } from 'lucide-react'
+import { Plus, X, Box, Layers, GitMerge, Edit3, Check, Trash2, KeyRound, Link2, BadgeCheck } from 'lucide-react'
 
 export default function CanvasSidePanel() {
   const project = useStore(s => s.currentProject())
   const deleteNode = useStore(s => s.deleteNode)
+  const selectedNodeIds = useStore(s => s.selectedNodeIds)
+  const selectNode = useStore(s => s.selectNode)
   const activeBusinessFlowId = useStore(s => s.activeBusinessFlowId)
   const editingBusinessFlowId = useStore(s => s.editingBusinessFlowId)
   const selectBusinessFlow = useStore(s => s.selectBusinessFlow)
+  const setViewport = useStore(s => s.setViewport)
   const addBusinessFlow = useStore(s => s.addBusinessFlow)
   const deleteBusinessFlow = useStore(s => s.deleteBusinessFlow)
   const setEditingBusinessFlow = useStore(s => s.setEditingBusinessFlow)
   const [showEditor, setShowEditor] = useState(false)
+  const [editorNode, setEditorNode] = useState<FlowNode | undefined>(undefined)
   const [showFlowCreateModal, setShowFlowCreateModal] = useState(false)
   const [newFlowName, setNewFlowName] = useState('')
   const [newFlowDesc, setNewFlowDesc] = useState('')
@@ -22,6 +27,38 @@ export default function CanvasSidePanel() {
   const unplacedNodes = project.nodes.filter(n => !n.regionId)
   const regions = project.regions
   const flows = project.businessFlows ?? []
+  const selectedNode = selectedNodeIds.length === 1
+    ? project.nodes.find(n => n.id === selectedNodeIds[0])
+    : undefined
+  const selectedFields = selectedNode?.fields ?? []
+  const primaryCount = selectedFields.filter(f => f.keyRole === 'primary').length
+  const foreignCount = selectedFields.filter(f => f.keyRole === 'foreign' || f.ref).length
+  const uniqueCount = selectedFields.filter(f => f.keyRole === 'unique').length
+  const resolveRef = (ref?: string) => {
+    if (!ref) return ''
+    const [nodeId, fieldName] = ref.split('.')
+    const target = project.nodes.find(n => n.id === nodeId)
+    return target ? `${target.label}.${fieldName ?? ''}` : ref
+  }
+  const focusNodes = (nodeIds: string[]) => {
+    const targetNodes = project.nodes.filter(n => nodeIds.includes(n.id))
+    if (targetNodes.length === 0) return
+    const container = document.querySelector('.canvas-container') as HTMLElement | null
+    if (!container) return
+    const minX = Math.min(...targetNodes.map(n => n.x))
+    const minY = Math.min(...targetNodes.map(n => n.y))
+    const maxX = Math.max(...targetNodes.map(n => n.x + 300))
+    const maxY = Math.max(...targetNodes.map(n => n.y + 120 + (n.fields?.length ?? 0) * 22))
+    const padding = 160
+    const w = Math.max(maxX - minX + padding * 2, 320)
+    const h = Math.max(maxY - minY + padding * 2, 240)
+    const scale = Math.max(0.3, Math.min(1.35, container.clientWidth / w, container.clientHeight / h))
+    setViewport({
+      scale,
+      x: -(minX - padding) * scale + (container.clientWidth - w * scale) / 2,
+      y: -(minY - padding) * scale + (container.clientHeight - h * scale) / 2,
+    })
+  }
 
   return (
     <>
@@ -31,12 +68,105 @@ export default function CanvasSidePanel() {
           <span className="text-sm font-bold text-zinc-900 tracking-tight">工具箱</span>
           <button
             className="flex items-center gap-1 text-xs font-semibold text-zinc-600 hover:text-zinc-900 transition-colors cursor-pointer"
-            onClick={() => setShowEditor(true)}
+            onClick={() => {
+              setEditorNode(undefined)
+              setShowEditor(true)
+            }}
           >
             <Plus size={14} />
             <span>实体</span>
           </button>
         </div>
+
+        {selectedNode && (
+          <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">当前实体</div>
+                <div className="mt-1 text-sm font-bold text-zinc-900 truncate" title={selectedNode.label}>
+                  {selectedNode.label}
+                </div>
+                <div className="text-[10px] text-zinc-400 truncate">
+                  {regions.find(r => r.id === selectedNode.regionId)?.title ?? selectedNode.sublabel ?? selectedNode.type}
+                </div>
+              </div>
+              <button
+                className="text-zinc-400 hover:text-zinc-700 transition-colors cursor-pointer"
+                onClick={() => selectNode(null)}
+                title="取消选择"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1.5">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5">
+                <div className="flex items-center gap-1 text-[10px] font-bold text-amber-700">
+                  <KeyRound size={11} />
+                  <span>PK</span>
+                </div>
+                <div className="text-sm font-bold text-amber-900">{primaryCount}</div>
+              </div>
+              <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1.5">
+                <div className="flex items-center gap-1 text-[10px] font-bold text-indigo-700">
+                  <Link2 size={11} />
+                  <span>FK</span>
+                </div>
+                <div className="text-sm font-bold text-indigo-900">{foreignCount}</div>
+              </div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5">
+                <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700">
+                  <BadgeCheck size={11} />
+                  <span>UK</span>
+                </div>
+                <div className="text-sm font-bold text-emerald-900">{uniqueCount}</div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+              {selectedFields.length === 0 ? (
+                <div className="text-xs text-zinc-400 py-2 text-center border border-dashed border-zinc-200 rounded-lg bg-white">
+                  暂无字段
+                </div>
+              ) : selectedFields.map(f => (
+                <div key={f.name} className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-[11px] font-semibold text-zinc-800">{f.name}</span>
+                    {(f.keyRole || f.ref) && (
+                      <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold ${
+                        f.keyRole === 'primary' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                        f.keyRole === 'unique' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                        'border-indigo-200 bg-indigo-50 text-indigo-700'
+                      }`}>
+                        {f.keyRole === 'primary' ? 'PK' : f.keyRole === 'unique' ? 'UK' : 'FK'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-400">
+                    <span>{f.type}</span>
+                    {f.ref && (
+                      <>
+                        <span>→</span>
+                        <span className="truncate" title={resolveRef(f.ref)}>{resolveRef(f.ref)}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50 transition-colors cursor-pointer"
+              onClick={() => {
+                setEditorNode(selectedNode)
+                setShowEditor(true)
+              }}
+            >
+              <Edit3 size={13} />
+              <span>编辑字段与键</span>
+            </button>
+          </div>
+        )}
 
         {/* Unplaced entities */}
         <div className="flex flex-col gap-2.5">
@@ -159,6 +289,7 @@ export default function CanvasSidePanel() {
                   onClick={() => {
                     if (isEditing) return
                     selectBusinessFlow(isActive ? null : f.id)
+                    if (!isActive) focusNodes(f.nodeIds)
                   }}
                 >
                   <div className="flex items-center justify-between min-w-0 pr-14">
@@ -170,6 +301,12 @@ export default function CanvasSidePanel() {
                     <span>{f.nodeIds.length} 节点</span>
                     <span>•</span>
                     <span>{f.edgeIds.length} 连线</span>
+                    {isActive && (
+                      <>
+                        <span>•</span>
+                        <span className="font-bold text-indigo-600">聚焦中</span>
+                      </>
+                    )}
                   </div>
 
                   {/* Actions overlay */}
@@ -230,7 +367,15 @@ export default function CanvasSidePanel() {
         </div>
       </div>
 
-      {showEditor && <EntityEditor onClose={() => setShowEditor(false)} />}
+      {showEditor && (
+        <EntityEditor
+          editNode={editorNode}
+          onClose={() => {
+            setShowEditor(false)
+            setEditorNode(undefined)
+          }}
+        />
+      )}
 
       {showFlowCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs">
