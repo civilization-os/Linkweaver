@@ -11,7 +11,7 @@ const FIELD_SCHEMA = {
   type: 'object',
   properties: {
     name: { type: 'string', description: 'Field name' },
-    type: { type: 'string', description: 'string|int|float|bool|datetime|ref|array|enum' },
+    type: { type: 'string', description: 'string|int|float|bool|datetime|bytes|ref|array|map|struct|enum|union' },
     primitiveType: { type: 'string', description: 'Optional logical primitive type' },
     keyRole: {
       type: 'string',
@@ -46,6 +46,17 @@ export function setupMcp(server: Server, store: Store) {
             properties: { 
               project_id: { type: 'string' },
               summary: { type: 'boolean', description: 'If true, returns a human-readable text summary instead of full JSON. Default is false.' }
+            },
+            required: ['project_id']
+          }
+        },
+        {
+          name: 'get_project',
+          description: 'Get full project structure by ID (alias of query_project without summary)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              project_id: { type: 'string' }
             },
             required: ['project_id']
           }
@@ -411,13 +422,15 @@ export function setupMcp(server: Server, store: Store) {
         },
         {
           name: 'create_business_flow',
-          description: 'Create a business flow',
+          description: 'Create a business flow. Optionally pass node_ids_json and edge_ids_json to create a complete flow from confirmed node/edge IDs.',
           inputSchema: {
             type: 'object',
             properties: {
               project_id: { type: 'string' },
               name: { type: 'string' },
-              description: { type: 'string' }
+              description: { type: 'string' },
+              node_ids_json: { type: 'string', description: 'JSON string array of node IDs included in this business flow' },
+              edge_ids_json: { type: 'string', description: 'JSON string array of edge/flow IDs included in this business flow' }
             },
             required: ['project_id', 'name']
           }
@@ -601,12 +614,14 @@ export function setupMcp(server: Server, store: Store) {
           if (!edge) return { content: [{ type: 'text', text: 'Project not found' }] };
           return { content: [{ type: 'text', text: `Flow created:\n${JSON.stringify(edge, null, 2)}` }] };
         }
+        case 'delete_edge':
         case 'delete_flow': {
           const { project_id, flow_id } = args as any;
           if (!project_id || !flow_id) throw new McpError(ErrorCode.InvalidParams, 'Missing project_id or flow_id');
           const ok = await store.deleteEdge(project_id, flow_id);
           return { content: [{ type: 'text', text: ok ? `Flow deleted` : `Flow not found` }] };
         }
+        case 'update_edge':
         case 'update_flow': {
           const { project_id, flow_id, label, dir } = args as any;
           if (!project_id || !flow_id) throw new McpError(ErrorCode.InvalidParams, 'Missing project_id or flow_id');
@@ -698,9 +713,19 @@ export function setupMcp(server: Server, store: Store) {
           return { content: [{ type: 'text', text: JSON.stringify(p.businessFlows, null, 2) }] };
         }
         case 'create_business_flow': {
+          let nodeIds: string[] = [];
+          let edgeIds: string[] = [];
+          if (args.node_ids_json) {
+            try { nodeIds = JSON.parse(args.node_ids_json as string); } catch(e){}
+          }
+          if (args.edge_ids_json) {
+            try { edgeIds = JSON.parse(args.edge_ids_json as string); } catch(e){}
+          }
           const flow = await store.addBusinessFlow(args.project_id as string, {
             name: args.name as string,
-            description: args.description as string
+            description: args.description as string,
+            nodeIds,
+            edgeIds
           });
           if (!flow) return { content: [{ type: 'text', text: 'Project not found' }] };
           return { content: [{ type: 'text', text: `Business flow created:\n${JSON.stringify(flow, null, 2)}` }] };
@@ -723,20 +748,7 @@ export function setupMcp(server: Server, store: Store) {
           const ok = await store.deleteBusinessFlow(args.project_id as string, args.flow_id as string);
           return { content: [{ type: 'text', text: ok ? `Flow deleted` : `Flow not found` }] };
         }
-        case 'delete_edge':
-        case 'delete_flow': {
-          const ok = await store.deleteEdge(args.project_id as string, args.flow_id as string);
-          return { content: [{ type: 'text', text: ok ? `Flow deleted` : `Flow not found` }] };
-        }
-        case 'update_edge':
-        case 'update_flow': {
-          const updates: any = {};
-          if (args.label) updates.label = args.label;
-          if (args.dir) updates.dir = args.dir;
-          const flow = await store.updateEdge(args.project_id as string, args.flow_id as string, updates);
-          if (!flow) return { content: [{ type: 'text', text: 'Flow not found' }] };
-          return { content: [{ type: 'text', text: `Flow updated:\n${JSON.stringify(flow, null, 2)}` }] };
-        }
+        
         case 'query_project': {
           const p = await store.getProject(args.project_id as string);
           if (!p) return { content: [{ type: 'text', text: 'Project not found' }] };
