@@ -17,7 +17,7 @@
     "build": "npm run build:web && npm run copy:web && rimraf dist && tsc",
     "start": "electron dist/main.js",
     "dev": "tsc && electron dist/main.js",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder --publish never"
   },
   "build": {
     "appId": "com.linkweaver.app",
