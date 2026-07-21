@@ -1,61 +1,69 @@
 # Linkweaver
 
-> 智能需求与业务架构协同流图系统
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-Linkweaver 是一个融合了**需求梳理、拓扑业务流设计、微服务架构可视化、动态业务流演示以及 MCP 协议 AI 联动**的新一代可视化架构设计工具。
+![License](https://img.shields.io/badge/license-MIT-green)
+![Node](https://img.shields.io/badge/node-%3E%3D18-blue)
+![React](https://img.shields.io/badge/react-18-61dafb)
+![TypeScript](https://img.shields.io/badge/typescript-blue)
+![MCP](https://img.shields.io/badge/MCP-Integrated-orange)
 
-## ✨ 核心特性
+> Intelligent Requirement & Business Architecture Collaborative Flow System
 
-### 🗺️ 可视化画布
-- **实体节点**（数据表/服务/角色）拖拽布局，支持字段定义
-- **区域分组**（Region），按服务领域划分，支持折叠/展开
-- **连接线**，支持正向/反向/双向数据流
-- **画布缩放**与视图重置
+Linkweaver is a next-generation visual architecture design tool that integrates **requirement management, topological business flow design, microservice architecture visualization, dynamic business flow demonstration, and Model Context Protocol (MCP) AI integration**.
 
-### 🔥 业务流（Business Flow）
-- 创建并管理多个业务流程（如"用户登录到购买全链路"）
-- 选中业务流后，相关节点和线段单独高亮，其余元素虚化降噪
-- **粒子流向动画**：一枚发光能量球从起始节点出发，沿业务流路径飞越各节点和连接线
-  - 节点被"触碰"时会产生霓虹脉冲闪光特效
-  - 支持播放速度实时调节（200ms - 2000ms）
+## ✨ Core Features
 
-### 🤖 MCP 协议集成
-通过 Model Context Protocol（MCP）暴露完整 API，大模型可直接操作项目：
-- list_projects / query_project / get_project
-- create_entity / update_entity / delete_entity / duplicate_entity / align_entities
-- create_flow / update_flow / delete_flow（update_edge / delete_edge 作为兼容别名）
-- list_requirements / create_requirement / update_requirement / delete_requirement
-- list_business_flows / create_business_flow / update_business_flow / delete_business_flow
+### 🗺️ Visual Canvas
+- **Entity Nodes** (Data Tables / Services / Roles) drag-and-drop layout with field definition support.
+- **Regions**, partitioned by service domains, supporting collapse/expand.
+- **Edges**, supporting forward, reverse, and bidirectional data flows.
+- **Canvas Zoom** and view reset with zoom-to-fit capability.
 
-### 📊 项目管理
-- 多项目切换，需求文档管理
-- 画布自动布局（Format）
-- PNG / GIF 导出
+### 🔥 Business Flows
+- Create and manage multiple business flows (e.g., "User Login to Purchase Pipeline").
+- When a business flow is selected, relevant nodes and edges are highlighted while others are faded out for noise reduction.
+- **Particle Flow Animation**: A glowing energy ball travels from the start node across edges and nodes along the business flow path.
+  - Nodes emit neon pulse flash effects when "touched" by the particle.
+  - Real-time playback speed adjustment (200ms - 2000ms).
 
-## 🚀 快速开始
+### 🤖 MCP Protocol Integration
+Exposes a complete API via the Model Context Protocol (MCP), allowing Large Language Models (LLMs) to directly manipulate projects:
+- `list_projects` / `query_project` / `get_project`
+- `create_entity` / `update_entity` / `delete_entity` / `duplicate_entity` / `align_entities`
+- `create_flow` / `update_flow` / `delete_flow` (`update_edge` / `delete_edge` as compatible aliases)
+- `list_requirements` / `create_requirement` / `update_requirement` / `delete_requirement`
+- `list_business_flows` / `create_business_flow` / `update_business_flow` / `delete_business_flow`
 
-Codex 全局 MCP 安装说明见：[INSTALL.md](./INSTALL.md)
+### 📊 Project Management
+- Multi-project switching and requirement document management.
+- Automatic canvas layout formatting (Format).
+- PNG / GIF export.
 
-### 前置要求
+## 🚀 Quick Start
+
+For Codex global MCP installation instructions, see: [INSTALL.md](./INSTALL.md)
+
+### Prerequisites
 - Node.js 18+
 
-### 启动开发环境
+### Starting the Development Environment
 
 ```bash
-# 1. 启动前端和后端（MCP Server 内置前端伺服）
+# 1. Start Frontend and Backend (MCP Server includes frontend serving)
 cd server
 npm install
 npm run build
 npm start
 ```
 
-浏览器访问 http://localhost:8081
+Visit http://localhost:8081 in your browser.
 
-### MCP 接入配置
+### MCP Configuration
 
-在 AI 工具（如 Claude Desktop、Cursor）的 MCP 配置中添加：
+Add the following to the MCP configuration of AI tools (like Claude Desktop, Cursor):
 
-**方式一：使用 NPM 直接运行（推荐）**
+**Method 1: Run directly using NPM (Recommended)**
 ```json
 {
   "mcpServers": {
@@ -63,14 +71,14 @@ npm start
       "command": "npx",
       "args": ["-y", "linkweaver"],
       "env": {
-        "LINKWEAVER_DATA_DIR": "你的本地数据存储路径（例如：D:\\LinkweaverData）"
+        "LINKWEAVER_DATA_DIR": "Your local data storage path (e.g., D:\\LinkweaverData)"
       }
     }
   }
 }
 ```
 
-**方式二：本地源码运行**
+**Method 2: Run from local source code**
 ```json
 {
   "mcpServers": {
@@ -85,38 +93,38 @@ npm start
 }
 ```
 
-## 🏗️ 技术栈
+## 🏗️ Technology Stack
 
-| 层级 | 技术 |
+| Layer | Technology |
 |------|------|
-| 前端 | React 18 + TypeScript + Vite + Tailwind CSS |
-| 状态管理 | Zustand |
-| 后端 / MCP | Node.js + TypeScript + @modelcontextprotocol/sdk |
-| 数据存储 | JSON 文件持久化 (带文件锁机制) |
-| 协议 | REST API + MCP stdio |
+| Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
+| State Management | Zustand |
+| Backend / MCP | Node.js + TypeScript + @modelcontextprotocol/sdk |
+| Data Storage | JSON file persistence (with file locking mechanism) |
+| Protocol | REST API + MCP stdio |
 
-## 📁 项目结构
+## 📁 Project Structure
 
 ```
 Linkweaver/
-├── web/          # React 前端
+├── web/          # React Frontend
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Canvas/       # 主画布
-│   │   │   ├── Toolbar/      # 工具栏
-│   │   │   ├── Sidebar/      # 项目侧边栏
-│   │   │   └── CanvasSidePanel/  # 业务流面板
-│   │   ├── store/            # Zustand 状态
-│   │   └── types/            # TypeScript 类型
-└── server/       # Node.js 后端 / MCP Server
+│   │   │   ├── Canvas/       # Main Canvas
+│   │   │   ├── Toolbar/      # Toolbar
+│   │   │   ├── Sidebar/      # Project Sidebar
+│   │   │   └── CanvasSidePanel/  # Business Flow Panel
+│   │   ├── store/            # Zustand State
+│   │   └── types/            # TypeScript Types
+└── server/       # Node.js Backend / MCP Server
     ├── src/
-    │   ├── index.ts   # 主入口，端口侦测与服务挂载
-    │   ├── api.ts     # REST API 路由
-    │   ├── mcp.ts     # MCP 工具注册
-    │   ├── store.ts   # JSON 读写与文件锁
-    │   └── models.ts  # 数据模型
+    │   ├── index.ts   # Main entry, port detection and service mounting
+    │   ├── api.ts     # REST API routes
+    │   ├── mcp.ts     # MCP tool registration
+    │   ├── store.ts   # JSON I/O and file locks
+    │   └── models.ts  # Data models
 ```
 
-## 📝 许可证
+## 📝 License
 
 MIT License
