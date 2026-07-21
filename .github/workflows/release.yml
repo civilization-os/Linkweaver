@@ -1,9 +1,10 @@
-name: Release
+name: Build and Publish Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -36,12 +37,11 @@ jobs:
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Latest Release
           files: |
             server/dist-electron/*.exe
+            server/dist-electron/*.blockmap
           draft: false
-          prerelease: true
+          prerelease: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
