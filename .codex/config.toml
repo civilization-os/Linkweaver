@@ -1,0 +1,6 @@
+[mcp_servers.linkweaver]
+command = "node"
+args = ['D:\project\Workbench\server\dist\index.js']
+
+[mcp_servers.linkweaver.env]
+LINKWEAVER_DATA_DIR = 'D:\project\Workbench\data'
