@@ -4,7 +4,7 @@ import type { FlowNode } from '../../types'
 import EdgeEditor from '../EdgeEditor/EdgeEditor'
 import EntityEditor from '../EntityEditor/EntityEditor'
 import MiniMap from './MiniMap'
-import { ChevronDown, ChevronUp, Table, User, Cog, Box, Key, Link2, AlignLeft, AlignCenter, AlignRight, LayoutGrid } from 'lucide-react'
+import { ChevronDown, ChevronUp, Table, User, Cog, Box, Key, Link2, AlignLeft, AlignCenter, AlignRight, LayoutGrid, Focus } from 'lucide-react'
 
 const BASE_CANVAS_W = 6000
 const BASE_CANVAS_H = 4000
@@ -1534,6 +1534,13 @@ export default function Canvas() {
                         )}
                       </div>
                       <div className="flex items-center gap-1">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); store.focusNode(node.id) }}
+                          className="p-0.5 opacity-0 group-hover/node:opacity-100 hover:bg-zinc-100 rounded text-zinc-400 hover:text-indigo-600 transition-all cursor-pointer"
+                          title="聚焦到此节点"
+                        >
+                          <Focus size={13} />
+                        </button>
                         {node.sublabel && density !== 'compact' && (
                           <span className="text-[9px] bg-zinc-100 text-zinc-500 font-semibold px-1.5 py-0.5 rounded border border-zinc-200/30">
                             {node.sublabel}

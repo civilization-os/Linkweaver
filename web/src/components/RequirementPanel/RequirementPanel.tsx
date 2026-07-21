@@ -131,11 +131,14 @@ export default function RequirementPanel() {
           onClick={() => setIsFocusMode(false)}
         />
       )}
-      <div className={`flex flex-col z-50 bg-white transition-all duration-300 ${
-        isFocusMode 
-          ? 'fixed inset-y-8 inset-x-8 md:inset-x-24 lg:inset-x-48 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.15)]' 
-          : 'absolute inset-y-0 right-0 w-[500px] border-l border-zinc-200 shadow-2xl animate-in slide-in-from-right-8'
-      }`}>
+      <div 
+        className={`flex flex-col z-50 bg-white transition-all duration-300 ${
+          isFocusMode 
+            ? 'fixed inset-y-8 inset-x-8 md:inset-x-24 lg:inset-x-48 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.15)]' 
+            : 'absolute bottom-0 right-0 w-[500px] border-l border-zinc-200 shadow-2xl animate-in slide-in-from-right-8'
+        }`}
+        style={!isFocusMode ? { top: '48px' } : undefined}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-200/80">
           <div className="flex items-center gap-3">

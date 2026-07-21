@@ -7,8 +7,10 @@ import {
   Database,
   ArrowRightLeft,
   Layers,
-  ClipboardList
+  ClipboardList,
+  Settings
 } from 'lucide-react'
+import SettingsModal from '../SettingsModal/SettingsModal'
 
 export default function Overview() {
   const projects = useStore(s => s.projects)
@@ -18,6 +20,7 @@ export default function Overview() {
   const switchProject = useStore(s => s.switchProject)
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
+  const [showSettings, setShowSettings] = useState(false)
 
   const handleCreate = () => {
     const name = newName.trim()
@@ -32,13 +35,22 @@ export default function Overview() {
       {/* Title Header */}
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold tracking-tight text-zinc-900">项目概览</h1>
-        <button
-          className="flex items-center gap-2 bg-zinc-900 text-zinc-50 hover:bg-zinc-850 active:bg-zinc-950 px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all duration-150 cursor-pointer"
-          onClick={() => setShowNew(true)}
-        >
-          <Plus size={16} />
-          <span>新建项目</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            className="flex items-center gap-2 bg-white text-zinc-600 hover:text-zinc-900 border border-zinc-200 hover:border-zinc-300 px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all duration-150 cursor-pointer"
+            onClick={() => setShowSettings(true)}
+          >
+            <Settings size={16} />
+            <span>设置</span>
+          </button>
+          <button
+            className="flex items-center gap-2 bg-zinc-900 text-zinc-50 hover:bg-zinc-850 active:bg-zinc-950 px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all duration-150 cursor-pointer"
+            onClick={() => setShowNew(true)}
+          >
+            <Plus size={16} />
+            <span>新建项目</span>
+          </button>
+        </div>
       </div>
 
       {/* Inline Create Form */}
@@ -149,6 +161,8 @@ export default function Overview() {
           )
         })}
       </div>
+
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </div>
   )
 }

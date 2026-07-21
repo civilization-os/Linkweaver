@@ -149,16 +149,32 @@ export default function Toolbar() {
       })
       console.log('[Linkweaver] domToBlob generated successfully')
 
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.style.display = 'none'
-      link.download = `${project.name || 'project'}.png`
-      link.href = url
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-      console.log('[Linkweaver] PNG download link clicked and URL revoked')
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64Data = (reader.result as string).split(',')[1];
+        // @ts-ignore
+        const ipcRenderer = window.require ? window.require('electron').ipcRenderer : null;
+        if (ipcRenderer) {
+          const filePath = await ipcRenderer.invoke('save-file', {
+            defaultPath: `${project.name || 'project'}.png`,
+            data: base64Data
+          });
+          if (filePath) {
+            ipcRenderer.invoke('show-notification', { title: '导出成功', body: `文件已保存: ${filePath}` });
+          }
+        } else {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.style.display = 'none';
+          link.download = `${project.name || 'project'}.png`;
+          link.href = url;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }
+      };
+      reader.readAsDataURL(blob);
     } catch (err) {
       console.error('[Linkweaver] Export PNG failed in catch block:', err)
     } finally {
@@ -289,20 +305,32 @@ export default function Toolbar() {
       }, async (obj: any) => {
         if (!obj.error) {
           try {
-            // Convert base64 data URI output of gifshot to a Blob using fetch
-            const res = await fetch(obj.image)
-            const gifBlob = await res.blob()
-            const gifUrl = URL.createObjectURL(gifBlob)
-            
-            const link = document.createElement('a')
-            link.style.display = 'none'
-            link.download = `${project.name || 'project'}.gif`
-            link.href = gifUrl
-            document.body.appendChild(link)
-            link.click()
-            document.body.removeChild(link)
-            URL.revokeObjectURL(gifUrl)
-            console.log('[Linkweaver] GIF download link clicked and URL revoked')
+            // obj.image is already a base64 Data URL
+            const base64Data = obj.image.split(',')[1];
+            // @ts-ignore
+            const ipcRenderer = window.require ? window.require('electron').ipcRenderer : null;
+            if (ipcRenderer) {
+              const filePath = await ipcRenderer.invoke('save-file', {
+                defaultPath: `${project.name || 'project'}.gif`,
+                data: base64Data
+              });
+              if (filePath) {
+                ipcRenderer.invoke('show-notification', { title: '导出成功', body: `文件已保存: ${filePath}` });
+              }
+            } else {
+              const res = await fetch(obj.image);
+              const gifBlob = await res.blob();
+              const gifUrl = URL.createObjectURL(gifBlob);
+              
+              const link = document.createElement('a');
+              link.style.display = 'none';
+              link.download = `${project.name || 'project'}.gif`;
+              link.href = gifUrl;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(gifUrl);
+            }
           } catch (fetchErr) {
             console.error('[Linkweaver] Failed to convert GIF dataURL to Blob:', fetchErr)
           }
@@ -379,7 +407,7 @@ export default function Toolbar() {
   return (
     <div className="relative z-30">
       {/* Main Toolbar */}
-      <div className="flex flex-wrap items-center gap-2.5 px-6 py-3 border-b border-zinc-200 bg-white/85 backdrop-blur-md select-none [&>*]:shrink-0">
+      <div className="drag-region flex flex-wrap items-center gap-2.5 px-6 py-3 pr-[150px] border-b border-zinc-200 bg-white/85 backdrop-blur-md select-none">
         <span className="text-sm font-semibold text-zinc-900 truncate max-w-[200px]">
           {project?.name ?? ''} <span className="font-normal text-zinc-400">· 拓扑流图</span>
         </span>
@@ -441,6 +469,8 @@ export default function Toolbar() {
         </button>
 
         <div className="w-px h-4 bg-zinc-200 mx-1.5" />
+
+        <div className="flex-1 min-w-[20px]" /> {/* Spacer to push right elements */}
 
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />

@@ -71,6 +71,7 @@ interface AppState {
   toggleRegionCollapse: (id: string) => void
   toggleAllRegionsCollapse: (collapsed: boolean) => void
   resetView: () => void
+  focusNode: (nodeId: string) => void
   syncCurrentProject: () => Promise<void>
   formatCanvas: (mode?: 'default' | 'rectangle') => Promise<void>
   activeBusinessFlowId: string | null
@@ -561,14 +562,12 @@ export const useStore = create<AppState>((set, get) => ({
             r.y = b.y
             r.w = b.width
             r.h = b.height
-            api.updateRegion(proj.id, r.id, { x: r.x, y: r.y, w: r.w, h: r.h }).catch(() => {})
           }
         } else {
           const n = nodes.find(nd => nd.id === b.id)
           if (n && b.x !== undefined && b.y !== undefined) {
             n.x = b.x + b.nodes[0].x
             n.y = b.y + b.nodes[0].y
-            api.updateNode(proj.id, n.id, { x: n.x, y: n.y }).catch(() => {})
           }
         }
         
@@ -578,7 +577,6 @@ export const useStore = create<AppState>((set, get) => ({
             if (n && b.x !== undefined && b.y !== undefined) {
               n.x = b.x + bn.x
               n.y = b.y + bn.y
-              api.updateNode(proj.id, n.id, { x: n.x, y: n.y }).catch(() => {})
             }
           })
         }
@@ -617,7 +615,6 @@ export const useStore = create<AppState>((set, get) => ({
           const nodeWidth = get().showThreeColumns ? 300 : 220
           n.x = dn.x - (nodeWidth / 2)
           n.y = dn.y - actualHeight / 2
-          api.updateNode(proj.id, n.id, { x: n.x, y: n.y }).catch(() => {})
         }
       })
 
@@ -626,7 +623,6 @@ export const useStore = create<AppState>((set, get) => ({
         if (regionNodes.length === 0) {
           r.w = Math.max(r.w || 300, 300)
           r.h = Math.max(r.h || 200, 200)
-          api.updateRegion(proj.id, r.id, { x: r.x, y: r.y, w: r.w, h: r.h }).catch(() => {})
           return
         }
         
@@ -647,8 +643,6 @@ export const useStore = create<AppState>((set, get) => ({
         r.y = minY - 60
         r.w = (maxX - minX) + 80
         r.h = (maxY - minY) + 100
-        
-        api.updateRegion(proj.id, r.id, { x: r.x, y: r.y, w: r.w, h: r.h }).catch(() => {})
       })
     }
 
@@ -659,6 +653,11 @@ export const useStore = create<AppState>((set, get) => ({
           : p
       ),
     }))
+
+    get().updateProject(proj.id, { nodes, regions })
+    
+    // Auto-fit to view after format
+    setTimeout(() => get().resetView(), 100)
   },
 
   addRegion: (region) => {
@@ -730,7 +729,74 @@ export const useStore = create<AppState>((set, get) => ({
     }))
   },
 
-  resetView: () => set({ viewport: { x: 0, y: 0, scale: 1 } }),
+  resetView: () => {
+    const proj = get().currentProject()
+    if (!proj) return
+    const nodes = proj.nodes
+    if (nodes.length === 0) {
+      set({ viewport: { x: 0, y: 0, scale: 1 } })
+      return
+    }
+    
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    nodes.forEach(n => {
+      minX = Math.min(minX, n.x)
+      minY = Math.min(minY, n.y)
+      const fieldCount = n.fields ? n.fields.length : 0
+      const actualHeight = 60 + fieldCount * 22
+      const nodeWidth = get().showThreeColumns ? 300 : 220
+      maxX = Math.max(maxX, n.x + nodeWidth)
+      maxY = Math.max(maxY, n.y + actualHeight)
+    })
+    
+    minX -= 150
+    minY -= 150
+    maxX += 150
+    maxY += 150
+    
+    const w = maxX - minX
+    const h = maxY - minY
+    
+    const winW = typeof window !== 'undefined' ? window.innerWidth : 1200
+    const winH = typeof window !== 'undefined' ? window.innerHeight : 800
+    
+    const scaleX = winW / w
+    const scaleY = winH / h
+    let scale = Math.min(scaleX, scaleY)
+    scale = Math.max(0.1, Math.min(scale, 1))
+    
+    const cx = minX + w / 2
+    const cy = minY + h / 2
+    
+    const viewX = (winW / 2) - (cx * scale)
+    const viewY = (winH / 2) - (cy * scale)
+    
+    set({ viewport: { x: viewX, y: viewY, scale } })
+  },
+
+  focusNode: (nodeId: string) => {
+    const proj = get().currentProject()
+    if (!proj) return
+    const n = proj.nodes.find(nd => nd.id === nodeId)
+    if (!n) return
+    
+    const fieldCount = n.fields ? n.fields.length : 0
+    const actualHeight = 60 + fieldCount * 22
+    const nodeWidth = get().showThreeColumns ? 300 : 220
+    
+    const cx = n.x + nodeWidth / 2
+    const cy = n.y + actualHeight / 2
+    
+    const winW = typeof window !== 'undefined' ? window.innerWidth : 1200
+    const winH = typeof window !== 'undefined' ? window.innerHeight : 800
+    
+    const targetScale = 1.0
+    
+    const viewX = (winW / 2) - (cx * targetScale)
+    const viewY = (winH / 2) - (cy * targetScale)
+    
+    set({ viewport: { x: viewX, y: viewY, scale: targetScale } })
+  },
 
   selectBusinessFlow: (id) => set({ activeBusinessFlowId: id }),
 

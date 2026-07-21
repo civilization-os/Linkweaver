@@ -8,6 +8,18 @@
 html, body, #root {
   height: 100%;
   overflow: hidden;
+  background-color: transparent; /* Allows Mica to show through */
+}
+
+/* Electron Window Drag */
+.drag-region {
+  -webkit-app-region: drag;
+}
+.drag-region * {
+  -webkit-app-region: no-drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
 }
 
 /* Custom Grid background lines */

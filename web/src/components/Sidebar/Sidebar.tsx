@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useStore } from '../../store/useStore'
-import { LayoutGrid, FolderKanban, FileCode, Plus, CircleDashed, Loader2, CheckCircle2 } from 'lucide-react'
+import { LayoutGrid, FolderKanban, FileCode, Plus, CircleDashed, Loader2, CheckCircle2, Settings } from 'lucide-react'
+import SettingsModal from '../SettingsModal/SettingsModal'
 
 export default function Sidebar() {
   const page = useStore(s => s.page)
@@ -11,12 +13,14 @@ export default function Sidebar() {
   const selectedRequirementId = useStore(s => s.selectedRequirementId)
   const selectRequirement = useStore(s => s.selectRequirement)
 
+  const [showSettings, setShowSettings] = useState(false)
+
   const activeProject = projects.find(p => p.id === activeProjectId)
 
   return (
     <div className="w-64 bg-zinc-50 border-r border-zinc-200/80 p-6 flex flex-col h-full shrink-0 select-none">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 mb-8">
+      <div className="drag-region flex items-center gap-2.5 mb-8 mt-1">
         <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)] shrink-0 ring-1 ring-zinc-200/50">
           <img src="/pwa-192x192.png" alt="Linkweaver Logo" className="w-full h-full object-cover" />
         </div>
@@ -123,9 +127,18 @@ export default function Sidebar() {
       )}
 
       {/* Footer */}
-      <div className="mt-auto pt-4 border-t border-zinc-200 flex justify-center items-center text-xs text-zinc-300 font-bold tracking-wide">
-        v{__APP_VERSION__}
+      <div className="mt-auto pt-4 border-t border-zinc-200 flex justify-between items-center text-xs text-zinc-400 font-bold tracking-wide">
+        <span>v{__APP_VERSION__}</span>
+        <button 
+          className="flex items-center gap-1.5 hover:text-zinc-800 transition-colors cursor-pointer"
+          onClick={() => setShowSettings(true)}
+        >
+          <Settings size={14} />
+          <span>设置</span>
+        </button>
       </div>
+
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </div>
   )
 }

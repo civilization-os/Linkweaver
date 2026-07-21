@@ -31,7 +31,25 @@ export default function App() {
     const onVisible = () => { if (!document.hidden) syncRef.current() }
     document.addEventListener('visibilitychange', onVisible)
     const interval = setInterval(() => syncRef.current(), 15000)
-    return () => { document.removeEventListener('visibilitychange', onVisible); clearInterval(interval) }
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        syncRef.current();
+        // @ts-ignore
+        const ipcRenderer = window.require ? window.require('electron').ipcRenderer : null;
+        if (ipcRenderer) {
+          ipcRenderer.invoke('show-notification', { title: '保存成功', body: '当前项目状态已同步到本地' });
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    
+    return () => { 
+      document.removeEventListener('visibilitychange', onVisible); 
+      clearInterval(interval);
+      window.removeEventListener('keydown', handleKeyDown);
+    }
   }, [])
 
   if (loading) {
@@ -43,7 +61,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-white font-sans text-zinc-950">
+    <div className="flex h-screen w-screen overflow-hidden bg-white/80 font-sans text-zinc-950">
       {/* Sidebar Navigation */}
       {!focusMode && <Sidebar />}
 
