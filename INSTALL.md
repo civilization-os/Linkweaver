@@ -22,7 +22,7 @@ Run this from the repository root:
 
 ```powershell
 cd D:\project\Workbench\server
-npm install
+npm ci
 npm run build
 ```
 

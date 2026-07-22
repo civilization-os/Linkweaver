@@ -4,127 +4,99 @@
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-blue)
-![React](https://img.shields.io/badge/react-18-61dafb)
+![React](https://img.shields.io/badge/react-19-61dafb)
 ![TypeScript](https://img.shields.io/badge/typescript-blue)
 ![MCP](https://img.shields.io/badge/MCP-Integrated-orange)
 
-> 智能需求与业务架构协同流图系统
+> 面向需求、业务流程和架构设计的可视化协同工具。
 
-Linkweaver 是一个融合了**需求梳理、拓扑业务流设计、微服务架构可视化、动态业务流演示以及 MCP 协议 AI 联动**的新一代可视化架构设计工具。
+Linkweaver 集成了需求管理、拓扑式业务流设计、微服务架构可视化、画布动画演示，以及 Model Context Protocol（MCP）接入能力。
 
-## ✨ 核心特性
+## 推荐使用方式
 
-### 🗺️ 可视化画布
-- **实体节点**（数据表/服务/角色）拖拽布局，支持字段定义
-- **区域分组**（Region），按服务领域划分，支持折叠/展开
-- **连接线**，支持正向/反向/双向数据流
-- **画布缩放**与视图重置
+Linkweaver 现在不再推荐 npm/npx 分发方式。请使用以下方式：
 
-### 🔥 业务流（Business Flow）
-- 创建并管理多个业务流程（如"用户登录到购买全链路"）
-- 选中业务流后，相关节点和线段单独高亮，其余元素虚化降噪
-- **粒子流向动画**：一枚发光能量球从起始节点出发，沿业务流路径飞越各节点和连接线
-  - 节点被"触碰"时会产生霓虹脉冲闪光特效
-  - 支持播放速度实时调节（200ms - 2000ms）
+- 桌面端：使用本仓库构建出的 Windows 安装包。
+- Codex 本地 MCP：从源码构建后，直接配置 stdio 入口。
+- URL 型 MCP 客户端：运行桌面端或 `npm run serve`，再连接 Streamable HTTP 或旧版 SSE。
 
-### 🤖 MCP 协议集成
-通过 Model Context Protocol（MCP）暴露完整 API，大模型可直接操作项目：
-- list_projects / query_project / get_project
-- create_entity / update_entity / delete_entity / duplicate_entity / align_entities
-- create_flow / update_flow / delete_flow（update_edge / delete_edge 作为兼容别名）
-- list_requirements / create_requirement / update_requirement / delete_requirement
-- list_business_flows / create_business_flow / update_business_flow / delete_business_flow
+## 核心能力
 
-### 📊 项目管理
-- 多项目切换，需求文档管理
-- 画布自动布局（Format）
-- PNG / GIF 导出
+- 可视化画布：实体、角色、流程、区域、数据流。
+- 显式字段语义：通过 `keyRole` 标记 PK/FK/UK，不再根据 `id`、`*_id` 等字段名自动推断。
+- 业务流程高亮和动画演示。
+- 需求管理，并可关联画布节点、连线、区域。
+- JSON 文件持久化，带文件锁。
+- MCP 工具覆盖项目、实体、连线、区域、需求、业务流程、搜索、画布格式化。
 
-## 🚀 快速开始
+## 源码构建
 
-Codex 全局 MCP 安装说明见：[INSTALL.md](./INSTALL.md)
+前置要求：Node.js 18+。
 
-### 前置要求
-- Node.js 18+
-
-### 启动开发环境
-
-```bash
-# 1. 启动前端和后端（MCP Server 内置前端伺服）
+```powershell
 cd server
-npm install
+npm ci
 npm run build
+```
+
+从源码运行桌面端：
+
+```powershell
 npm start
 ```
 
-浏览器访问 http://localhost:8081
+仅运行 HTTP/SSE 服务，不启动 Electron：
 
-### MCP 接入配置
-
-在 AI 工具（如 Claude Desktop、Cursor）的 MCP 配置中添加：
-
-**方式一：使用 NPM 直接运行（推荐）**
-```json
-{
-  "mcpServers": {
-    "linkweaver": {
-      "command": "npx",
-      "args": ["-y", "linkweaver"],
-      "env": {
-        "LINKWEAVER_DATA_DIR": "你的本地数据存储路径（例如：D:\\LinkweaverData）"
-      }
-    }
-  }
-}
+```powershell
+npm run serve
 ```
 
-**方式二：本地源码运行**
-```json
-{
-  "mcpServers": {
-    "linkweaver": {
-      "command": "node",
-      "args": ["D:\\project\\Workbench\\server\\dist\\index.js"],
-      "env": {
-        "LINKWEAVER_DATA_DIR": "D:\\project\\Workbench\\data"
-      }
-    }
-  }
-}
+## MCP 配置
+
+Codex 本地使用时，推荐直接配置构建后的 stdio 入口：
+
+```toml
+[mcp_servers.linkweaver]
+command = "node"
+args = ['D:\project\Workbench\server\dist\index.js']
+
+[mcp_servers.linkweaver.env]
+LINKWEAVER_DATA_DIR = 'D:\project\Workbench\data'
 ```
 
-## 🏗️ 技术栈
+URL 型客户端可连接：
+
+- Streamable HTTP：`http://127.0.0.1:8081/mcp`
+- 旧版 SSE：`http://127.0.0.1:8081/mcp/sse`
+
+完整安装说明见 [INSTALL.md](./INSTALL.md)。
+
+## 发布安装包
+
+生成 Windows 安装包：
+
+```powershell
+cd server
+npm run dist
+```
+
+安装包输出位置：
+
+```text
+server/dist-electron/Linkweaver Setup <version>.exe
+```
+
+## 技术栈
 
 | 层级 | 技术 |
-|------|------|
-| 前端 | React 18 + TypeScript + Vite + Tailwind CSS |
+| --- | --- |
+| 桌面端 | Electron |
+| 前端 | React + TypeScript + Vite + Tailwind CSS |
 | 状态管理 | Zustand |
-| 后端 / MCP | Node.js + TypeScript + @modelcontextprotocol/sdk |
-| 数据存储 | JSON 文件持久化 (带文件锁机制) |
-| 协议 | REST API + MCP stdio |
+| 后端 / MCP | Node.js + Express + @modelcontextprotocol/sdk |
+| 存储 | JSON 文件持久化 + 文件锁 |
+| 协议 | REST API + MCP stdio + MCP Streamable HTTP + legacy MCP SSE |
 
-## 📁 项目结构
-
-```
-Linkweaver/
-├── web/          # React 前端
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Canvas/       # 主画布
-│   │   │   ├── Toolbar/      # 工具栏
-│   │   │   ├── Sidebar/      # 项目侧边栏
-│   │   │   └── CanvasSidePanel/  # 业务流面板
-│   │   ├── store/            # Zustand 状态
-│   │   └── types/            # TypeScript 类型
-└── server/       # Node.js 后端 / MCP Server
-    ├── src/
-    │   ├── index.ts   # 主入口，端口侦测与服务挂载
-    │   ├── api.ts     # REST API 路由
-    │   ├── mcp.ts     # MCP 工具注册
-    │   ├── store.ts   # JSON 读写与文件锁
-    │   └── models.ts  # 数据模型
-```
-
-## 📝 许可证
+## License
 
 MIT License
