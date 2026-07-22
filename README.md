@@ -17,8 +17,8 @@ Linkweaver combines requirement management, topology-style business flow design,
 Linkweaver is no longer distributed or recommended through npm/npx. Use one of these supported modes:
 
 - Desktop app: install the Windows package generated from this repository.
-- Codex local MCP: build from source and configure the stdio entrypoint directly.
-- URL-based MCP clients: run the desktop app or `npm run serve`, then connect to Streamable HTTP or legacy SSE.
+- MCP clients: run the desktop app or `npm run serve`, then connect to Streamable HTTP or legacy SSE.
+- Local stdio entrypoint: kept as a compatibility fallback, not the main recommendation.
 
 ## Features
 
@@ -53,7 +53,14 @@ npm run serve
 
 ## MCP configuration
 
-For Codex local usage, configure the built stdio entrypoint:
+Recommended URL endpoints:
+
+- Streamable HTTP: `http://127.0.0.1:8081/mcp`
+- Legacy SSE: `http://127.0.0.1:8081/mcp/sse`
+
+The desktop Settings panel can copy client JSON for both modes.
+
+The stdio entrypoint is still available for local compatibility:
 
 ```toml
 [mcp_servers.linkweaver]
@@ -63,11 +70,6 @@ args = ['D:\project\Workbench\server\dist\index.js']
 [mcp_servers.linkweaver.env]
 LINKWEAVER_DATA_DIR = 'D:\project\Workbench\data'
 ```
-
-For URL-based clients:
-
-- Streamable HTTP: `http://127.0.0.1:8081/mcp`
-- Legacy SSE: `http://127.0.0.1:8081/mcp/sse`
 
 See [INSTALL.md](./INSTALL.md) for full installation details.
 

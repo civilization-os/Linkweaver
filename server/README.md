@@ -6,8 +6,8 @@ This package contains the Electron main process, Express API server, MCP server,
 
 Do not use npm/npx as the recommended distribution path. Build from this repository and use:
 
-- `dist/index.js` for Codex stdio MCP.
 - `dist/server.js` for standalone HTTP/SSE MCP service.
+- `dist/index.js` for local stdio compatibility fallback.
 - Electron installer from `dist-electron` for desktop usage.
 
 ## Build
@@ -45,8 +45,8 @@ dist-electron/Linkweaver Setup <version>.exe
 
 ## MCP transports
 
-- stdio: `dist/index.js`
 - Streamable HTTP: `http://127.0.0.1:8081/mcp`
 - Legacy SSE: `http://127.0.0.1:8081/mcp/sse`
+- stdio fallback: `dist/index.js`
 
-The desktop settings switch only controls the built-in HTTP/SSE MCP service. It does not control Codex stdio MCP.
+The desktop settings switch only controls the built-in HTTP/SSE MCP service. It does not control stdio fallback processes.

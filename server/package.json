@@ -1,6 +1,6 @@
 {
   "name": "linkweaver",
-  "version": "1.4.8",
+  "version": "1.4.9",
   "description": "Linkweaver MCP Server",
   "repository": "civilization-os/Linkweaver",
   "main": "dist/main.js",

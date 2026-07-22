@@ -82,18 +82,18 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
         <div className="p-5 space-y-6">
           {!ipcRenderer && (
             <div className="p-3 bg-amber-50 text-amber-700 text-xs font-semibold border border-amber-200/50 rounded-lg">
-              当前运行在浏览器环境，MCP 服务设置需要桌面客户端支持。
+              当前运行在浏览器环境，HTTP/SSE MCP 服务设置需要桌面客户端支持。
             </div>
           )}
 
           <div className="space-y-4">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">MCP 服务器设置</h3>
+            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">HTTP/SSE MCP 服务</h3>
 
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[13px] font-bold text-zinc-800">启用 MCP 协议</div>
+                <div className="text-[13px] font-bold text-zinc-800">启用 HTTP/SSE MCP 服务</div>
                 <div className="text-[11px] text-zinc-500 mt-0.5">
-                  允许 AI Agent 接入并控制项目资源
+                  允许本机 AI Agent 通过 URL 接入并控制项目资源
                 </div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -111,9 +111,9 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
             <div className="space-y-1.5">
               <label className="text-[13px] font-bold text-zinc-800">端口号</label>
               <div className="text-[11px] text-zinc-500 mb-1">
-                推荐地址：
+                推荐：
                 <code className="bg-zinc-100 px-1 rounded">{httpUrl}</code>
-                ，兼容 SSE：
+                ，SSE 兼容：
                 <code className="bg-zinc-100 px-1 rounded">{sseUrl}</code>
               </div>
               <input
@@ -162,9 +162,11 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
                 </div>
 
                 <div className="text-[11px] text-zinc-500 leading-relaxed">
-                  新版 MCP 客户端优先使用 Streamable HTTP：<code className="bg-zinc-100 px-1 rounded">/mcp</code>。
-                  如果客户端只支持旧 SSE，再切到 <code className="bg-zinc-100 px-1 rounded">/mcp/sse</code>。
-                  Codex 本地全局配置仍建议使用 stdio。
+                  主推荐 URL 接入。新客户端优先使用 Streamable HTTP：
+                  <code className="bg-zinc-100 px-1 rounded">/mcp</code>。
+                  如果客户端只支持旧协议，再使用 SSE：
+                  <code className="bg-zinc-100 px-1 rounded">/mcp/sse</code>。
+                  stdio 入口仅作为本地兼容/备用方式，不作为主推荐。
                 </div>
               </div>
             )}

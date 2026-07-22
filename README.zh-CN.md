@@ -17,8 +17,8 @@ Linkweaver 集成了需求管理、拓扑式业务流设计、微服务架构可
 Linkweaver 现在不再推荐 npm/npx 分发方式。请使用以下方式：
 
 - 桌面端：使用本仓库构建出的 Windows 安装包。
-- Codex 本地 MCP：从源码构建后，直接配置 stdio 入口。
-- URL 型 MCP 客户端：运行桌面端或 `npm run serve`，再连接 Streamable HTTP 或旧版 SSE。
+- MCP 客户端：运行桌面端或 `npm run serve`，再连接 Streamable HTTP 或旧版 SSE。
+- 本地 stdio 入口：保留为兼容/备用方式，不作为主推荐。
 
 ## 核心能力
 
@@ -53,7 +53,14 @@ npm run serve
 
 ## MCP 配置
 
-Codex 本地使用时，推荐直接配置构建后的 stdio 入口：
+推荐 URL 入口：
+
+- Streamable HTTP：`http://127.0.0.1:8081/mcp`
+- 旧版 SSE：`http://127.0.0.1:8081/mcp/sse`
+
+桌面端设置页可以复制这两种客户端配置。
+
+stdio 入口仍保留，用于本地兼容/备用：
 
 ```toml
 [mcp_servers.linkweaver]
@@ -63,11 +70,6 @@ args = ['D:\project\Workbench\server\dist\index.js']
 [mcp_servers.linkweaver.env]
 LINKWEAVER_DATA_DIR = 'D:\project\Workbench\data'
 ```
-
-URL 型客户端可连接：
-
-- Streamable HTTP：`http://127.0.0.1:8081/mcp`
-- 旧版 SSE：`http://127.0.0.1:8081/mcp/sse`
 
 完整安装说明见 [INSTALL.md](./INSTALL.md)。
 

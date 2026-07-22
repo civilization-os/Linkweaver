@@ -1,12 +1,22 @@
-# Install Linkweaver MCP in Codex
+# Install Linkweaver MCP
 
-This guide installs Linkweaver as a global Codex MCP server.
+This guide describes the supported local MCP setup for Linkweaver.
+
+## Recommended transport
+
+Use URL-based MCP as the main path:
+
+- Streamable HTTP: `http://127.0.0.1:8081/mcp`
+- Legacy SSE: `http://127.0.0.1:8081/mcp/sse`
+
+Use Streamable HTTP when the client supports it. Use SSE only for clients that have not adopted Streamable HTTP yet.
+
+The stdio entrypoint is still available as a local compatibility fallback, but it is not the recommended setup.
 
 ## Prerequisites
 
 - Node.js 18+
-- Codex installed on this machine
-- This repository cloned locally
+- This repository cloned locally, or the Linkweaver desktop app installed
 
 The examples below use this repository path:
 
@@ -16,9 +26,7 @@ D:\project\Workbench
 
 If your path is different, replace it in the commands and config.
 
-## Build
-
-Run this from the repository root:
+## Build from source
 
 ```powershell
 cd D:\project\Workbench\server
@@ -26,70 +34,23 @@ npm ci
 npm run build
 ```
 
-The MCP entrypoint is generated at:
-
-```powershell
-D:\project\Workbench\server\dist\index.js
-```
-
-The HTTP/SSE service entrypoint is generated at:
+Generated entrypoints:
 
 ```powershell
 D:\project\Workbench\server\dist\server.js
+D:\project\Workbench\server\dist\index.js
 ```
 
-## Configure Codex Globally
+## Start HTTP/SSE MCP service
 
-Open the Codex config file:
+Option A: run the desktop app and enable HTTP/SSE MCP service in Settings.
 
-```powershell
-C:\Users\<your-user>\.codex\config.toml
-```
-
-Add this MCP server block:
-
-```toml
-[mcp_servers.linkweaver]
-command = "node"
-args = ['D:\project\Workbench\server\dist\index.js']
-```
-
-Optional: set a dedicated data directory:
-
-```toml
-[mcp_servers.linkweaver.env]
-LINKWEAVER_DATA_DIR = 'D:\project\Workbench\data'
-```
-
-## Reload Codex
-
-Restart Codex or open a new Codex task so the global MCP config is reloaded.
-
-## Verify
-
-In a new Codex task, ask Codex to use the Linkweaver MCP server, for example:
-
-```text
-List Linkweaver projects.
-```
-
-The MCP server exposes tools for projects, entities, data flows, regions, requirements, business flows, search, and canvas formatting.
-
-## Optional: HTTP/SSE Mode
-
-Use stdio for local Codex by default. Use HTTP/SSE only when your client requires a URL transport or when you want several MCP clients to connect to one already-running Linkweaver service.
-
-Start the service:
+Option B: run the standalone service:
 
 ```powershell
 cd D:\project\Workbench\server
 npm run serve
 ```
-
-Default endpoints:
-
-- Streamable HTTP, recommended for newer MCP clients: `http://127.0.0.1:8081/mcp`
-- Legacy SSE, for older SSE clients: `http://127.0.0.1:8081/mcp/sse`
 
 Optional environment variables:
 
@@ -99,20 +60,9 @@ $env:LINKWEAVER_DATA_DIR = 'D:\project\Workbench\data'
 npm run serve
 ```
 
-Example SSE client configuration:
+## Client configuration
 
-```json
-{
-  "mcpServers": {
-    "linkweaver": {
-      "type": "sse",
-      "url": "http://127.0.0.1:8081/mcp/sse"
-    }
-  }
-}
-```
-
-If your client supports Streamable HTTP, prefer:
+Streamable HTTP:
 
 ```json
 {
@@ -125,7 +75,35 @@ If your client supports Streamable HTTP, prefer:
 }
 ```
 
-## Notes for Models
+Legacy SSE:
+
+```json
+{
+  "mcpServers": {
+    "linkweaver": {
+      "type": "sse",
+      "url": "http://127.0.0.1:8081/mcp/sse"
+    }
+  }
+}
+```
+
+The desktop Settings panel also provides copyable JSON for both modes.
+
+## Compatibility fallback: stdio
+
+Use this only when a local client requires stdio or cannot connect to the URL transport.
+
+```toml
+[mcp_servers.linkweaver]
+command = "node"
+args = ['D:\project\Workbench\server\dist\index.js']
+
+[mcp_servers.linkweaver.env]
+LINKWEAVER_DATA_DIR = 'D:\project\Workbench\data'
+```
+
+## Notes for models
 
 - Use `create_entity` and `update_entity` for entities.
 - Field key semantics must be explicit:
