@@ -13,10 +13,11 @@
   ],
   "type": "module",
   "scripts": {
-    "build:web": "cd ../web && npm install && npm run build",
+    "build:web": "cd ../web && npm ci && npm run build",
     "copy:web": "rimraf public && node -e \"require('fs').cpSync('../web/dist', 'public', {recursive: true})\"",
     "build": "npm run build:web && npm run copy:web && rimraf dist && tsc",
     "start": "electron dist/main.js",
+    "serve": "node dist/server.js",
     "dev": "tsc && electron dist/main.js",
     "dist": "npm run build && electron-builder --publish never"
   },
@@ -41,7 +42,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.5.0",
     "@types/dagre": "^0.7.54",
-    "cors": "^2.8.5",
+    "body-parser": "^2.3.0",
+    "cors": "^2.8.6",
     "dagre": "^0.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",

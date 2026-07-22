@@ -101,7 +101,15 @@ Add the following to the MCP configuration of AI tools (like Claude Desktop, Cur
 | State Management | Zustand |
 | Backend / MCP | Node.js + TypeScript + @modelcontextprotocol/sdk |
 | Data Storage | JSON file persistence (with file locking mechanism) |
-| Protocol | REST API + MCP stdio |
+| Protocol | REST API + MCP stdio + MCP Streamable HTTP + legacy MCP SSE |
+
+### MCP Transport Options
+
+- Local Codex/self-use: use stdio with `server/dist/index.js`.
+- URL-based clients: run `npm run serve`, then connect to `http://127.0.0.1:8081/mcp`.
+- Older SSE clients: run `npm run serve`, then connect to `http://127.0.0.1:8081/mcp/sse`.
+
+See [INSTALL.md](./INSTALL.md) for full Codex global config and HTTP/SSE examples.
 
 ## 📁 Project Structure
 

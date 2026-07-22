@@ -32,6 +32,12 @@ The MCP entrypoint is generated at:
 D:\project\Workbench\server\dist\index.js
 ```
 
+The HTTP/SSE service entrypoint is generated at:
+
+```powershell
+D:\project\Workbench\server\dist\server.js
+```
+
 ## Configure Codex Globally
 
 Open the Codex config file:
@@ -68,6 +74,56 @@ List Linkweaver projects.
 ```
 
 The MCP server exposes tools for projects, entities, data flows, regions, requirements, business flows, search, and canvas formatting.
+
+## Optional: HTTP/SSE Mode
+
+Use stdio for local Codex by default. Use HTTP/SSE only when your client requires a URL transport or when you want several MCP clients to connect to one already-running Linkweaver service.
+
+Start the service:
+
+```powershell
+cd D:\project\Workbench\server
+npm run serve
+```
+
+Default endpoints:
+
+- Streamable HTTP, recommended for newer MCP clients: `http://127.0.0.1:8081/mcp`
+- Legacy SSE, for older SSE clients: `http://127.0.0.1:8081/mcp/sse`
+
+Optional environment variables:
+
+```powershell
+$env:LINKWEAVER_API_PORT = '8081'
+$env:LINKWEAVER_DATA_DIR = 'D:\project\Workbench\data'
+npm run serve
+```
+
+Example SSE client configuration:
+
+```json
+{
+  "mcpServers": {
+    "linkweaver": {
+      "type": "sse",
+      "url": "http://127.0.0.1:8081/mcp/sse"
+    }
+  }
+}
+```
+
+If your client supports Streamable HTTP, prefer:
+
+```json
+{
+  "mcpServers": {
+    "linkweaver": {
+      "type": "http",
+      "url": "http://127.0.0.1:8081/mcp"
+    }
+  }
+}
+```
 
 ## Notes for Models
 

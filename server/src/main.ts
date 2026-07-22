@@ -6,8 +6,12 @@ import { Store } from './store.js';
 import { createApiRouter } from './api.js';
 import { setupMcp } from './mcp.js';
 import express from 'express';
+import cors from 'cors';
+import { randomUUID } from 'crypto';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,13 +19,37 @@ const __dirname = path.dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
-let mcpServer: Server | null = null;
 let expressApp: express.Express | null = null;
 let expressServer: any = null;
-let sseTransport: SSEServerTransport | null = null;
+const activeSseTransports = new Map<string, SSEServerTransport>();
+const activeHttpTransports = new Map<string, StreamableHTTPServerTransport>();
 
 const gotTheLock = app.requestSingleInstanceLock();
 let isQuitting = false;
+
+function createLinkweaverMcpServer(store: Store) {
+  const server = new Server(
+    { name: 'Linkweaver MCP TS', version: '1.0.0' },
+    { capabilities: { tools: {} } }
+  );
+  setupMcp(server, store);
+  return server;
+}
+
+function getStringHeader(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+async function closeActiveMcpTransports() {
+  const transports = [
+    ...Array.from(activeSseTransports.values()),
+    ...Array.from(activeHttpTransports.values()),
+  ];
+  activeSseTransports.clear();
+  activeHttpTransports.clear();
+
+  await Promise.allSettled(transports.map(transport => transport.close()));
+}
 
 if (!gotTheLock) {
   app.quit();
@@ -53,6 +81,18 @@ if (!gotTheLock) {
 
     // Start Express API Server
     expressApp = express();
+    expressApp.use(cors());
+    expressApp.use(express.json({ limit: '10mb' }));
+    
+    // Logging middleware for MCP requests
+    expressApp.use((req, res, next) => {
+      if (req.url.startsWith('/mcp')) {
+        const bodyStr = req.body === undefined ? '' : JSON.stringify(req.body);
+        const logLine = `[${new Date().toISOString()}] ${req.method} ${req.url}\nBody: ${bodyStr}\n`;
+        fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), logLine);
+      }
+      next();
+    });
     
     // Config settings
     const settingsPath = path.join(userDataPath, 'config.json');
@@ -73,34 +113,118 @@ if (!gotTheLock) {
     
     // Setup MCP Server if enabled
     const setupMcpServer = () => {
-      if (!mcpServer) {
-        mcpServer = new Server(
-          { name: 'Linkweaver MCP TS', version: '1.0.0' },
-          { capabilities: { tools: {} } }
-        );
-        setupMcp(mcpServer, store);
-      }
+      expressApp!.all('/mcp', async (req, res) => {
+        if (!settings.mcpEnabled) {
+          res.status(403).send('MCP Disabled');
+          return;
+        }
+
+        try {
+          const sessionId = getStringHeader(req.headers['mcp-session-id']);
+          let transport: StreamableHTTPServerTransport | undefined;
+
+          if (sessionId) {
+            transport = activeHttpTransports.get(sessionId);
+            if (!transport) {
+              res.status(404).json({
+                jsonrpc: '2.0',
+                error: { code: -32001, message: 'MCP session not found' },
+                id: null,
+              });
+              return;
+            }
+          } else if (req.method === 'POST' && isInitializeRequest(req.body)) {
+            transport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: () => randomUUID(),
+              onsessioninitialized: initializedSessionId => {
+                if (transport) {
+                  activeHttpTransports.set(initializedSessionId, transport);
+                }
+              },
+            });
+
+            transport.onclose = () => {
+              const closedSessionId = transport?.sessionId;
+              if (closedSessionId) {
+                activeHttpTransports.delete(closedSessionId);
+              }
+            };
+
+            const mcpServer = createLinkweaverMcpServer(store);
+            await mcpServer.connect(transport);
+          } else {
+            res.status(400).json({
+              jsonrpc: '2.0',
+              error: { code: -32000, message: 'Bad Request: No valid MCP session ID provided' },
+              id: null,
+            });
+            return;
+          }
+
+          await transport.handleRequest(req, res, req.body);
+        } catch (error) {
+          console.error('Error handling MCP Streamable HTTP request:', error);
+          if (!res.headersSent) {
+            res.status(500).json({
+              jsonrpc: '2.0',
+              error: { code: -32603, message: 'Internal server error' },
+              id: null,
+            });
+          }
+        }
+      });
 
       expressApp!.get('/mcp/sse', async (req, res) => {
         if (!settings.mcpEnabled) {
           res.status(403).send('MCP Disabled');
           return;
         }
-        sseTransport = new SSEServerTransport('/mcp/message', res);
-        await mcpServer!.connect(sseTransport);
+        
+        // Use a robust connection-per-client model
+        const sseTransport = new SSEServerTransport('/mcp/message', res);
+        activeSseTransports.set(sseTransport.sessionId, sseTransport);
+
+        const mcpServer = createLinkweaverMcpServer(store);
+
+        res.on('close', () => {
+          fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), `[DEBUG] GET connection closed for sessionId: ${sseTransport.sessionId}\n`);
+          activeSseTransports.delete(sseTransport.sessionId);
+        });
+
+        mcpServer.connect(sseTransport).catch(err => {
+          console.error("MCP Server connect error:", err);
+        });
       });
 
-      expressApp!.post('/mcp/message', async (req, res) => {
+      const handlePostMessage = async (req: express.Request, res: express.Response) => {
         if (!settings.mcpEnabled) {
           res.status(403).send('MCP Disabled');
           return;
         }
-        if (sseTransport) {
-          await sseTransport.handlePostMessage(req, res);
-        } else {
-          res.status(400).send('No SSE transport');
+        
+        const sessionId = req.query.sessionId as string;
+        let transport = sessionId ? activeSseTransports.get(sessionId) : null;
+        
+        // Fallback for non-compliant clients: use the most recently created transport
+        if (!transport) {
+          const transports = Array.from(activeSseTransports.values());
+          if (transports.length > 0) {
+            transport = transports[transports.length - 1];
+          }
         }
-      });
+
+        if (transport) {
+          fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), `[DEBUG] Transport found for POST. Handling message...\n`);
+          await transport.handlePostMessage(req, res, req.body);
+        } else {
+          const errStr = `No SSE transport (active: ${activeSseTransports.size}, requested sessionId: ${sessionId})`;
+          fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), `[DEBUG] 400 ERROR: ${errStr}\n`);
+          res.status(400).send(errStr);
+        }
+      };
+
+      expressApp!.post('/mcp/sse', handlePostMessage);
+      expressApp!.post('/mcp/message', handlePostMessage);
     };
 
     setupMcpServer();
@@ -136,10 +260,22 @@ if (!gotTheLock) {
 
     // IPC Handlers for Settings
     ipcMain.handle('get-settings', () => getSettings());
+    ipcMain.handle('get-mcp-config-info', () => {
+      return {
+        scriptPath: path.join(__dirname, 'index.js').replace(/\\/g, '\\\\'),
+        dataDir: userDataPath.replace(/\\/g, '\\\\')
+      };
+    });
     ipcMain.handle('save-settings', (event, newSettings) => {
       const oldPort = settings.mcpPort;
+      const wasMcpEnabled = settings.mcpEnabled;
       settings = { ...settings, ...newSettings };
       saveSettings(settings);
+      if (wasMcpEnabled && !settings.mcpEnabled) {
+        closeActiveMcpTransports().catch(err => {
+          console.error('Failed to close active MCP transports:', err);
+        });
+      }
       if (oldPort !== settings.mcpPort) {
         startServer(); // restart if port changed
       }
@@ -222,7 +358,7 @@ if (!gotTheLock) {
         mainWindow?.loadURL(`http://localhost:${settings.mcpPort}`);
       }
     };
-    
+
     loadApp();
 
     mainWindow.on('close', (event) => {
