@@ -43,6 +43,24 @@ async function main() {
 
   // MCP Streamable HTTP (recommended by current MCP SDK)
   const streamableTransports = new Map<string, StreamableHTTPServerTransport>();
+  const sseTransports = new Map<string, SSEServerTransport>();
+
+  app.get('/mcp/health', (req, res) => {
+    res.json({
+      ok: true,
+      enabled: true,
+      transports: ['streamable-http', 'legacy-sse'],
+      endpoints: {
+        streamableHttp: '/mcp',
+        legacySse: '/mcp/sse',
+        legacySseMessages: '/mcp/message'
+      },
+      activeSessions: {
+        streamableHttp: streamableTransports.size,
+        legacySse: sseTransports.size
+      }
+    });
+  });
 
   app.all('/mcp', async (req, res) => {
     try {
@@ -54,7 +72,7 @@ async function main() {
         if (!transport) {
           res.status(404).json({
             jsonrpc: '2.0',
-            error: { code: -32001, message: 'MCP session not found' },
+            error: { code: -32001, message: 'MCP Streamable HTTP session not found. Re-initialize with POST /mcp or reconnect the client.' },
             id: null,
           });
           return;
@@ -81,7 +99,7 @@ async function main() {
       } else {
         res.status(400).json({
           jsonrpc: '2.0',
-          error: { code: -32000, message: 'Bad Request: No valid MCP session ID provided' },
+          error: { code: -32000, message: 'Bad Request: no valid MCP session. Use POST /mcp to initialize Streamable HTTP, or GET /mcp/sse for legacy SSE clients.' },
           id: null,
         });
         return;
@@ -93,7 +111,7 @@ async function main() {
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: '2.0',
-          error: { code: -32603, message: 'Internal server error' },
+          error: { code: -32603, message: 'Internal MCP server error while handling Streamable HTTP request.' },
           id: null,
         });
       }
@@ -101,8 +119,6 @@ async function main() {
   });
 
   // MCP legacy HTTP+SSE compatibility.
-  const sseTransports = new Map<string, SSEServerTransport>();
-
   app.get('/mcp/sse', async (req, res) => {
     try {
       const sseTransport = new SSEServerTransport('/mcp/message', res);
@@ -128,7 +144,7 @@ async function main() {
       : Array.from(sseTransports.values()).at(-1);
 
     if (!transport) {
-      res.status(400).send(`No SSE transport (active: ${sseTransports.size}, requested sessionId: ${sessionId})`);
+      res.status(400).send(`No legacy SSE transport is active (active: ${sseTransports.size}, requested sessionId: ${sessionId}). Open GET /mcp/sse first, then POST to /mcp/message?sessionId=...; use /mcp for Streamable HTTP clients.`);
       return;
     }
 

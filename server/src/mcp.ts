@@ -474,6 +474,15 @@ export function setupMcp(server: Server, store: Store) {
           }
         },
         {
+          name: 'validate_project',
+          description: 'Read-only project health check. Validates broken references, invalid field refs, explicit PK/FK/UK metadata, requirements, business flows, and isolated nodes without modifying the project.',
+          inputSchema: {
+            type: 'object',
+            properties: { project_id: { type: 'string' } },
+            required: ['project_id']
+          }
+        },
+        {
           name: 'search',
           description: 'Search for entities, regions, and data flows by text query',
           inputSchema: {
@@ -769,6 +778,13 @@ export function setupMcp(server: Server, store: Store) {
           const success = await store.formatCanvas(project_id);
           if (!success) throw new McpError(ErrorCode.InternalError, 'Project not found or failed to format');
           return { content: [{ type: 'text', text: `Canvas for project ${project_id} formatted successfully.` }] };
+        }
+        case 'validate_project': {
+          const { project_id } = args as any;
+          if (!project_id) throw new McpError(ErrorCode.InvalidParams, 'Missing project_id');
+          const result = await store.validateProject(project_id);
+          if (!result) throw new McpError(ErrorCode.InternalError, 'Project not found');
+          return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         }
         case 'search': {
           const { project_id, query } = args as any;

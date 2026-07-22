@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { X, Settings as SettingsIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, RefreshCw, X, Settings as SettingsIcon, WifiOff } from 'lucide-react';
 
 interface Settings {
   mcpEnabled: boolean;
@@ -7,18 +7,31 @@ interface Settings {
 }
 
 type TransportMode = 'http' | 'sse';
+type ServiceStatusState = 'idle' | 'checking' | 'online' | 'disabled' | 'offline';
+
+interface ServiceStatus {
+  state: ServiceStatusState;
+  message: string;
+  activeHttp?: number;
+  activeSse?: number;
+}
 
 export default function SettingsModal({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [portStr, setPortStr] = useState('8081');
   const [saving, setSaving] = useState(false);
   const [transportMode, setTransportMode] = useState<TransportMode>('http');
+  const [serviceStatus, setServiceStatus] = useState<ServiceStatus>({
+    state: 'idle',
+    message: '尚未检测',
+  });
 
   // @ts-ignore
   const ipcRenderer = window.require ? window.require('electron').ipcRenderer : null;
 
   const httpUrl = `http://127.0.0.1:${portStr}/mcp`;
   const sseUrl = `http://127.0.0.1:${portStr}/mcp/sse`;
+  const healthUrl = `http://127.0.0.1:${portStr}/mcp/health`;
 
   const clientConfig = useMemo(() => {
     const isHttp = transportMode === 'http';
@@ -32,6 +45,45 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
     };
   }, [httpUrl, sseUrl, transportMode]);
 
+  const checkServiceStatus = useCallback(async () => {
+    setServiceStatus({ state: 'checking', message: '正在检测 MCP 服务...' });
+
+    try {
+      const response = await fetch(healthUrl, { cache: 'no-store' });
+      const data = await response.json().catch(() => null);
+
+      if (response.status === 503 || data?.enabled === false) {
+        setServiceStatus({
+          state: 'disabled',
+          message: '服务进程可访问，但 MCP 已在设置中关闭。',
+          activeHttp: data?.activeSessions?.streamableHttp,
+          activeSse: data?.activeSessions?.legacySse,
+        });
+        return;
+      }
+
+      if (!response.ok || !data?.ok) {
+        setServiceStatus({
+          state: 'offline',
+          message: `检测失败：HTTP ${response.status}`,
+        });
+        return;
+      }
+
+      setServiceStatus({
+        state: 'online',
+        message: 'MCP 服务在线，客户端可以使用下方 URL 接入。',
+        activeHttp: data.activeSessions?.streamableHttp ?? 0,
+        activeSse: data.activeSessions?.legacySse ?? 0,
+      });
+    } catch {
+      setServiceStatus({
+        state: 'offline',
+        message: '未检测到本机 MCP 服务。请确认桌面端已运行且端口未被占用。',
+      });
+    }
+  }, [healthUrl]);
+
   useEffect(() => {
     if (ipcRenderer) {
       ipcRenderer.invoke('get-settings').then((s: Settings) => {
@@ -42,6 +94,14 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
       setSettings({ mcpEnabled: false, mcpPort: 8081 });
     }
   }, []);
+
+  useEffect(() => {
+    if (settings?.mcpEnabled) {
+      checkServiceStatus();
+    } else if (settings) {
+      setServiceStatus({ state: 'disabled', message: 'MCP 当前未启用。' });
+    }
+  }, [settings?.mcpEnabled, checkServiceStatus]);
 
   const handleSave = async () => {
     if (!settings) return;
@@ -60,6 +120,14 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
   const handleCopyConfig = () => {
     navigator.clipboard.writeText(JSON.stringify(clientConfig, null, 2));
   };
+
+  const statusTone = {
+    online: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    disabled: 'bg-amber-50 text-amber-700 border-amber-200',
+    offline: 'bg-rose-50 text-rose-700 border-rose-200',
+    checking: 'bg-blue-50 text-blue-700 border-blue-200',
+    idle: 'bg-zinc-50 text-zinc-600 border-zinc-200',
+  }[serviceStatus.state];
 
   if (!settings) return null;
 
@@ -125,6 +193,36 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
               />
             </div>
 
+            <div className={`rounded-lg border p-3 ${statusTone}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2 min-w-0">
+                  {serviceStatus.state === 'online' ? (
+                    <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
+                  ) : serviceStatus.state === 'checking' ? (
+                    <RefreshCw size={15} className="mt-0.5 shrink-0 animate-spin" />
+                  ) : (
+                    <WifiOff size={15} className="mt-0.5 shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-[12px] font-bold">MCP 状态</div>
+                    <div className="mt-0.5 text-[11px] leading-relaxed">{serviceStatus.message}</div>
+                    {serviceStatus.state === 'online' && (
+                      <div className="mt-1 text-[10px] opacity-80">
+                        活跃连接：HTTP {serviceStatus.activeHttp ?? 0} / SSE {serviceStatus.activeSse ?? 0}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={checkServiceStatus}
+                  disabled={serviceStatus.state === 'checking'}
+                  className="shrink-0 px-2 py-1 text-[10px] font-bold rounded-md bg-white/70 hover:bg-white transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  检测
+                </button>
+              </div>
+            </div>
+
             {settings.mcpEnabled && (
               <div className="pt-4 border-t border-zinc-100 space-y-3">
                 <div className="flex items-center justify-between">
@@ -163,10 +261,9 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
 
                 <div className="text-[11px] text-zinc-500 leading-relaxed">
                   主推荐 URL 接入。新客户端优先使用 Streamable HTTP：
-                  <code className="bg-zinc-100 px-1 rounded">/mcp</code>。
-                  如果客户端只支持旧协议，再使用 SSE：
-                  <code className="bg-zinc-100 px-1 rounded">/mcp/sse</code>。
-                  stdio 入口仅作为本地兼容/备用方式，不作为主推荐。
+                  <code className="bg-zinc-100 px-1 rounded">/mcp</code>。 如果客户端只支持旧协议，再使用 SSE：
+                  <code className="bg-zinc-100 px-1 rounded">/mcp/sse</code>。 stdio
+                  入口仅作为本地兼容/备用方式，不作为主推荐。
                 </div>
               </div>
             )}

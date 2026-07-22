@@ -110,12 +110,29 @@ if (!gotTheLock) {
     let settings = getSettings();
 
     const apiRouter = createApiRouter(store);
+
+    expressApp.get('/mcp/health', (req, res) => {
+      res.status(settings.mcpEnabled ? 200 : 503).json({
+        ok: Boolean(settings.mcpEnabled),
+        enabled: Boolean(settings.mcpEnabled),
+        transports: ['streamable-http', 'legacy-sse'],
+        endpoints: {
+          streamableHttp: '/mcp',
+          legacySse: '/mcp/sse',
+          legacySseMessages: '/mcp/message'
+        },
+        activeSessions: {
+          streamableHttp: activeHttpTransports.size,
+          legacySse: activeSseTransports.size
+        }
+      });
+    });
     
     // Setup MCP Server if enabled
     const setupMcpServer = () => {
       expressApp!.all('/mcp', async (req, res) => {
         if (!settings.mcpEnabled) {
-          res.status(403).send('MCP Disabled');
+          res.status(403).send('MCP HTTP/SSE service is disabled in Linkweaver Settings. Enable it before connecting.');
           return;
         }
 
@@ -128,7 +145,7 @@ if (!gotTheLock) {
             if (!transport) {
               res.status(404).json({
                 jsonrpc: '2.0',
-                error: { code: -32001, message: 'MCP session not found' },
+                error: { code: -32001, message: 'MCP Streamable HTTP session not found. Re-initialize with POST /mcp or reconnect the client.' },
                 id: null,
               });
               return;
@@ -155,7 +172,7 @@ if (!gotTheLock) {
           } else {
             res.status(400).json({
               jsonrpc: '2.0',
-              error: { code: -32000, message: 'Bad Request: No valid MCP session ID provided' },
+              error: { code: -32000, message: 'Bad Request: no valid MCP session. Use POST /mcp to initialize Streamable HTTP, or GET /mcp/sse for legacy SSE clients.' },
               id: null,
             });
             return;
@@ -167,7 +184,7 @@ if (!gotTheLock) {
           if (!res.headersSent) {
             res.status(500).json({
               jsonrpc: '2.0',
-              error: { code: -32603, message: 'Internal server error' },
+              error: { code: -32603, message: 'Internal MCP server error while handling Streamable HTTP request.' },
               id: null,
             });
           }
@@ -176,7 +193,7 @@ if (!gotTheLock) {
 
       expressApp!.get('/mcp/sse', async (req, res) => {
         if (!settings.mcpEnabled) {
-          res.status(403).send('MCP Disabled');
+          res.status(403).send('MCP HTTP/SSE service is disabled in Linkweaver Settings. Enable it before connecting.');
           return;
         }
         
@@ -198,7 +215,7 @@ if (!gotTheLock) {
 
       const handlePostMessage = async (req: express.Request, res: express.Response) => {
         if (!settings.mcpEnabled) {
-          res.status(403).send('MCP Disabled');
+          res.status(403).send('MCP HTTP/SSE service is disabled in Linkweaver Settings. Enable it before connecting.');
           return;
         }
         
@@ -217,7 +234,7 @@ if (!gotTheLock) {
           fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), `[DEBUG] Transport found for POST. Handling message...\n`);
           await transport.handlePostMessage(req, res, req.body);
         } else {
-          const errStr = `No SSE transport (active: ${activeSseTransports.size}, requested sessionId: ${sessionId})`;
+          const errStr = `No legacy SSE transport is active (active: ${activeSseTransports.size}, requested sessionId: ${sessionId}). Open GET /mcp/sse first, then POST to /mcp/message?sessionId=...; use /mcp for Streamable HTTP clients.`;
           fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), `[DEBUG] 400 ERROR: ${errStr}\n`);
           res.status(400).send(errStr);
         }

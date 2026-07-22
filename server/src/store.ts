@@ -6,6 +6,30 @@ import { Project, FlowNode, DataFlow, Region, BusinessFlow, Field, Requirement }
 import crypto from 'crypto';
 import dagre from 'dagre';
 
+export interface ProjectValidationIssue {
+  severity: 'error' | 'warning' | 'info';
+  code: string;
+  message: string;
+  nodeId?: string;
+  edgeId?: string;
+  regionId?: string;
+  requirementId?: string;
+  businessFlowId?: string;
+  fieldName?: string;
+}
+
+export interface ProjectValidationResult {
+  projectId: string;
+  name: string;
+  summary: {
+    errors: number;
+    warnings: number;
+    infos: number;
+    total: number;
+  };
+  issues: ProjectValidationIssue[];
+}
+
 function generateId(prefix: string): string {
   return prefix + crypto.randomBytes(4).toString('hex');
 }
@@ -489,6 +513,247 @@ export class Store {
           regions: matchedRegions
         },
         mutate: false
+      };
+    });
+  }
+
+  async validateProject(projectId: string): Promise<ProjectValidationResult | null> {
+    return this.withLock(projects => {
+      const p = projects.find(p => p.id === projectId);
+      if (!p) return { result: null, mutate: false };
+
+      const issues: ProjectValidationIssue[] = [];
+      const nodeIds = new Set(p.nodes.map(n => n.id));
+      const edgeIds = new Set(p.edges.map(e => e.id));
+      const regionIds = new Set(p.regions.map(r => r.id));
+      const connectedNodeIds = new Set<string>();
+
+      const addIssue = (
+        severity: ProjectValidationIssue['severity'],
+        code: string,
+        message: string,
+        refs: Omit<ProjectValidationIssue, 'severity' | 'code' | 'message'> = {}
+      ) => {
+        issues.push({ severity, code, message, ...refs });
+      };
+
+      const addDuplicateIssues = (
+        values: string[],
+        code: string,
+        label: string
+      ) => {
+        const seen = new Set<string>();
+        const duplicates = new Set<string>();
+        for (const value of values) {
+          if (seen.has(value)) duplicates.add(value);
+          seen.add(value);
+        }
+        for (const value of duplicates) {
+          addIssue('error', code, `${label} has duplicate id: ${value}`);
+        }
+      };
+
+      const getNode = (nodeId: string) => p.nodes.find(n => n.id === nodeId);
+      const getField = (nodeId: string, fieldName: string): Field | undefined => {
+        const node = getNode(nodeId);
+        return node?.fields?.find(f => f.name === fieldName);
+      };
+
+      addDuplicateIssues(p.nodes.map(n => n.id), 'duplicate_node_id', 'Project node list');
+      addDuplicateIssues(p.edges.map(e => e.id), 'duplicate_edge_id', 'Project edge list');
+      addDuplicateIssues(p.regions.map(r => r.id), 'duplicate_region_id', 'Project region list');
+
+      for (const node of p.nodes) {
+        if (node.regionId && !regionIds.has(node.regionId)) {
+          addIssue(
+            'warning',
+            'missing_region_reference',
+            `Node "${node.label}" references missing region ${node.regionId}.`,
+            { nodeId: node.id, regionId: node.regionId }
+          );
+        }
+
+        const fieldNames = new Set<string>();
+        const duplicatedFieldNames = new Set<string>();
+        for (const field of node.fields || []) {
+          const fieldName = field.name?.trim();
+          if (!fieldName) {
+            addIssue('warning', 'empty_field_name', `Node "${node.label}" has an empty field name.`, {
+              nodeId: node.id,
+            });
+            continue;
+          }
+
+          if (fieldNames.has(fieldName)) duplicatedFieldNames.add(fieldName);
+          fieldNames.add(fieldName);
+
+          if (field.keyRole === 'foreign' && !field.ref) {
+            addIssue(
+              'warning',
+              'foreign_key_without_ref',
+              `Field "${node.label}.${field.name}" is marked FK but has no explicit ref.`,
+              { nodeId: node.id, fieldName: field.name }
+            );
+          }
+
+          if (field.ref) {
+            const separatorIndex = field.ref.indexOf('.');
+            const refNodeId = separatorIndex >= 0 ? field.ref.slice(0, separatorIndex) : '';
+            const refFieldName = separatorIndex >= 0 ? field.ref.slice(separatorIndex + 1) : '';
+
+            if (!refNodeId || !refFieldName) {
+              addIssue(
+                'error',
+                'invalid_field_ref_format',
+                `Field "${node.label}.${field.name}" has invalid ref "${field.ref}". Expected entityId.fieldName.`,
+                { nodeId: node.id, fieldName: field.name }
+              );
+            } else if (!nodeIds.has(refNodeId)) {
+              addIssue(
+                'error',
+                'missing_ref_entity',
+                `Field "${node.label}.${field.name}" references missing entity ${refNodeId}.`,
+                { nodeId: node.id, fieldName: field.name }
+              );
+            } else if (!getField(refNodeId, refFieldName)) {
+              addIssue(
+                'error',
+                'missing_ref_field',
+                `Field "${node.label}.${field.name}" references missing field ${field.ref}.`,
+                { nodeId: node.id, fieldName: field.name }
+              );
+            }
+
+            if (field.keyRole && field.keyRole !== 'foreign') {
+              addIssue(
+                'warning',
+                'ref_on_non_foreign_key',
+                `Field "${node.label}.${field.name}" has ref but keyRole is "${field.keyRole}".`,
+                { nodeId: node.id, fieldName: field.name }
+              );
+            } else if (!field.keyRole) {
+              addIssue(
+                'info',
+                'ref_without_key_role',
+                `Field "${node.label}.${field.name}" has explicit ref but no keyRole.`,
+                { nodeId: node.id, fieldName: field.name }
+              );
+            }
+          }
+        }
+
+        for (const fieldName of duplicatedFieldNames) {
+          addIssue(
+            'warning',
+            'duplicate_field_name',
+            `Node "${node.label}" has duplicate field "${fieldName}".`,
+            { nodeId: node.id, fieldName }
+          );
+        }
+
+        const hasPrimaryKey = (node.fields || []).some(field => field.keyRole === 'primary');
+        if (node.type === 'entity' && (node.fields || []).length > 0 && !hasPrimaryKey) {
+          addIssue('info', 'entity_without_primary_key', `Entity "${node.label}" has fields but no explicit PK.`, {
+            nodeId: node.id,
+          });
+        }
+      }
+
+      for (const edge of p.edges) {
+        if (!nodeIds.has(edge.sourceId)) {
+          addIssue('error', 'missing_edge_source', `Edge "${edge.label || edge.id}" source node is missing.`, {
+            edgeId: edge.id,
+            nodeId: edge.sourceId,
+          });
+        } else {
+          connectedNodeIds.add(edge.sourceId);
+        }
+
+        if (!nodeIds.has(edge.targetId)) {
+          addIssue('error', 'missing_edge_target', `Edge "${edge.label || edge.id}" target node is missing.`, {
+            edgeId: edge.id,
+            nodeId: edge.targetId,
+          });
+        } else {
+          connectedNodeIds.add(edge.targetId);
+        }
+      }
+
+      for (const req of p.requirements || []) {
+        for (const nodeId of req.nodeIds || []) {
+          if (!nodeIds.has(nodeId)) {
+            addIssue('warning', 'requirement_missing_node', `Requirement "${req.title}" references missing node ${nodeId}.`, {
+              requirementId: req.id,
+              nodeId,
+            });
+          } else {
+            connectedNodeIds.add(nodeId);
+          }
+        }
+        for (const edgeId of req.edgeIds || []) {
+          if (!edgeIds.has(edgeId)) {
+            addIssue('warning', 'requirement_missing_edge', `Requirement "${req.title}" references missing edge ${edgeId}.`, {
+              requirementId: req.id,
+              edgeId,
+            });
+          }
+        }
+        for (const regionId of req.regionIds || []) {
+          if (!regionIds.has(regionId)) {
+            addIssue('warning', 'requirement_missing_region', `Requirement "${req.title}" references missing region ${regionId}.`, {
+              requirementId: req.id,
+              regionId,
+            });
+          }
+        }
+      }
+
+      for (const flow of p.businessFlows || []) {
+        for (const nodeId of flow.nodeIds || []) {
+          if (!nodeIds.has(nodeId)) {
+            addIssue('warning', 'business_flow_missing_node', `Business flow "${flow.name}" references missing node ${nodeId}.`, {
+              businessFlowId: flow.id,
+              nodeId,
+            });
+          } else {
+            connectedNodeIds.add(nodeId);
+          }
+        }
+        for (const edgeId of flow.edgeIds || []) {
+          if (!edgeIds.has(edgeId)) {
+            addIssue('warning', 'business_flow_missing_edge', `Business flow "${flow.name}" references missing edge ${edgeId}.`, {
+              businessFlowId: flow.id,
+              edgeId,
+            });
+          }
+        }
+      }
+
+      for (const node of p.nodes) {
+        if (!connectedNodeIds.has(node.id)) {
+          addIssue('info', 'isolated_node', `Node "${node.label}" is not connected to any edge, requirement, or business flow.`, {
+            nodeId: node.id,
+          });
+        }
+      }
+
+      const errors = issues.filter(issue => issue.severity === 'error').length;
+      const warnings = issues.filter(issue => issue.severity === 'warning').length;
+      const infos = issues.filter(issue => issue.severity === 'info').length;
+
+      return {
+        result: {
+          projectId: p.id,
+          name: p.name,
+          summary: {
+            errors,
+            warnings,
+            infos,
+            total: issues.length,
+          },
+          issues,
+        },
+        mutate: false,
       };
     });
   }
