@@ -40,6 +40,18 @@ function getStringHeader(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function isAllowedLocalOrigin(origin: string | undefined, port: number) {
+  if (!origin) return true;
+
+  try {
+    const url = new URL(origin);
+    const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
+    return allowedHosts.has(url.hostname) && (!url.port || url.port === String(port) || url.port === '5173');
+  } catch {
+    return false;
+  }
+}
+
 async function closeActiveMcpTransports() {
   const transports = [
     ...Array.from(activeSseTransports.values()),
@@ -81,19 +93,7 @@ if (!gotTheLock) {
 
     // Start Express API Server
     expressApp = express();
-    expressApp.use(cors());
-    expressApp.use(express.json({ limit: '10mb' }));
-    
-    // Logging middleware for MCP requests
-    expressApp.use((req, res, next) => {
-      if (req.url.startsWith('/mcp')) {
-        const bodyStr = req.body === undefined ? '' : JSON.stringify(req.body);
-        const logLine = `[${new Date().toISOString()}] ${req.method} ${req.url}\nBody: ${bodyStr}\n`;
-        fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), logLine);
-      }
-      next();
-    });
-    
+
     // Config settings
     const settingsPath = path.join(userDataPath, 'config.json');
     const getSettings = () => {
@@ -108,6 +108,23 @@ if (!gotTheLock) {
     };
 
     let settings = getSettings();
+
+    expressApp.use(cors({
+      origin: (origin, callback) => {
+        callback(isAllowedLocalOrigin(origin, settings.mcpPort) ? null : new Error('Origin not allowed'), true);
+      },
+    }));
+    expressApp.use(express.json({ limit: '10mb' }));
+
+    // Enable verbose MCP request logging only when explicitly debugging locally.
+    expressApp.use((req, res, next) => {
+      if (process.env.LINKWEAVER_MCP_DEBUG === '1' && req.url.startsWith('/mcp')) {
+        const bodyStr = req.body === undefined ? '' : JSON.stringify(req.body).slice(0, 2000);
+        const logLine = `[${new Date().toISOString()}] ${req.method} ${req.url}\nBody: ${bodyStr}\n`;
+        fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), logLine);
+      }
+      next();
+    });
 
     const apiRouter = createApiRouter(store);
 
@@ -204,7 +221,9 @@ if (!gotTheLock) {
         const mcpServer = createLinkweaverMcpServer(store);
 
         res.on('close', () => {
-          fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), `[DEBUG] GET connection closed for sessionId: ${sseTransport.sessionId}\n`);
+          if (process.env.LINKWEAVER_MCP_DEBUG === '1') {
+            fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), `[DEBUG] GET connection closed for sessionId: ${sseTransport.sessionId}\n`);
+          }
           activeSseTransports.delete(sseTransport.sessionId);
         });
 
@@ -219,23 +238,24 @@ if (!gotTheLock) {
           return;
         }
         
-        const sessionId = req.query.sessionId as string;
-        let transport = sessionId ? activeSseTransports.get(sessionId) : null;
-        
-        // Fallback for non-compliant clients: use the most recently created transport
-        if (!transport) {
-          const transports = Array.from(activeSseTransports.values());
-          if (transports.length > 0) {
-            transport = transports[transports.length - 1];
-          }
+        const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
+        if (!sessionId) {
+          res.status(400).send('Missing legacy SSE sessionId. Open GET /mcp/sse first, then POST to /mcp/message?sessionId=...');
+          return;
         }
 
+        const transport = activeSseTransports.get(sessionId);
+
         if (transport) {
-          fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), `[DEBUG] Transport found for POST. Handling message...\n`);
+          if (process.env.LINKWEAVER_MCP_DEBUG === '1') {
+            fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), `[DEBUG] Transport found for POST. Handling message...\n`);
+          }
           await transport.handlePostMessage(req, res, req.body);
         } else {
           const errStr = `No legacy SSE transport is active (active: ${activeSseTransports.size}, requested sessionId: ${sessionId}). Open GET /mcp/sse first, then POST to /mcp/message?sessionId=...; use /mcp for Streamable HTTP clients.`;
-          fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), `[DEBUG] 400 ERROR: ${errStr}\n`);
+          if (process.env.LINKWEAVER_MCP_DEBUG === '1') {
+            fs.appendFileSync(path.join(userDataPath, 'mcp_debug.log'), `[DEBUG] 400 ERROR: ${errStr}\n`);
+          }
           res.status(400).send(errStr);
         }
       };

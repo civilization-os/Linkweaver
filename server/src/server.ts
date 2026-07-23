@@ -31,12 +31,41 @@ function getStringHeader(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function getLocalOriginMiddleware(port: string | number) {
+  const allowedPort = String(port);
+
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const origin = req.headers.origin;
+    if (!origin) {
+      next();
+      return;
+    }
+
+    try {
+      const url = new URL(origin);
+      const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
+      if (allowedHosts.has(url.hostname) && (!url.port || url.port === allowedPort || url.port === '5173')) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+        next();
+        return;
+      }
+    } catch {
+      // Fall through to rejection.
+    }
+
+    res.status(403).send('Origin not allowed');
+  };
+}
+
 async function main() {
   const store = new Store(process.env.LINKWEAVER_DATA_DIR);
   await store.init();
+  const port = process.env.LINKWEAVER_API_PORT || 8081;
 
   // Start Express API Server
   const app = express();
+  app.use(getLocalOriginMiddleware(port));
   app.use(express.json({ limit: '10mb' }));
   const apiRouter = createApiRouter(store);
   app.use('/api', apiRouter);
@@ -139,9 +168,12 @@ async function main() {
 
   const handleSsePostMessage = async (req: express.Request, res: express.Response) => {
     const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
-    const transport = sessionId
-      ? sseTransports.get(sessionId)
-      : Array.from(sseTransports.values()).at(-1);
+    if (!sessionId) {
+      res.status(400).send('Missing legacy SSE sessionId. Open GET /mcp/sse first, then POST to /mcp/message?sessionId=...');
+      return;
+    }
+
+    const transport = sseTransports.get(sessionId);
 
     if (!transport) {
       res.status(400).send(`No legacy SSE transport is active (active: ${sseTransports.size}, requested sessionId: ${sessionId}). Open GET /mcp/sse first, then POST to /mcp/message?sessionId=...; use /mcp for Streamable HTTP clients.`);
@@ -174,8 +206,6 @@ async function main() {
       if (err) res.status(404).send('Frontend not built yet. Run npm run build in web directory.');
     });
   });
-
-  const port = process.env.LINKWEAVER_API_PORT || 8081;
 
   app.listen(port, () => {
     console.log(`Linkweaver Server running on port ${port}`);

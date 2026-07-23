@@ -29,6 +29,26 @@ const FIELD_SCHEMA = {
   required: ['name', 'type']
 };
 
+function parseJsonArg<T>(value: unknown, argName: string): T {
+  if (typeof value !== 'string') {
+    throw new McpError(ErrorCode.InvalidParams, `${argName} must be a JSON string`);
+  }
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    throw new McpError(ErrorCode.InvalidParams, `${argName} contains invalid JSON`);
+  }
+}
+
+function parseJsonArrayArg<T>(value: unknown, argName: string): T[] {
+  const parsed = parseJsonArg<unknown>(value, argName);
+  if (!Array.isArray(parsed)) {
+    throw new McpError(ErrorCode.InvalidParams, `${argName} must be a JSON array`);
+  }
+  return parsed as T[];
+}
+
 export function setupMcp(server: Server, store: Store) {
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
@@ -555,14 +575,14 @@ export function setupMcp(server: Server, store: Store) {
         case 'create_entity': {
           let fields = (args.fields as any[]) || [];
           if (args.fields_json) {
-            try { fields = JSON.parse(args.fields_json as string); } catch (e) {}
+            fields = parseJsonArrayArg<any>(args.fields_json, 'fields_json');
           }
-          const labelMap: Record<string, string> = { entity: '实体', actor: '外部', process: '流程', nested: '嵌套' };
+          const labelMap: Record<string, string> = { entity: 'Entity', actor: 'Actor', process: 'Process', nested: 'Nested' };
           const type = (args.type as string) || 'entity';
           const node = await store.addNode(args.project_id as string, {
             type,
             label: args.name as string,
-            sublabel: labelMap[type],
+            sublabel: labelMap[type] || type,
             fields,
             x: (args.x as number) ?? 300, 
             y: (args.y as number) ?? 300,
@@ -574,7 +594,7 @@ export function setupMcp(server: Server, store: Store) {
         case 'update_entity': {
           let fields = args.fields as any[] | undefined;
           if (args.fields_json) {
-            try { fields = JSON.parse(args.fields_json as string); } catch (e) {}
+            fields = parseJsonArrayArg<any>(args.fields_json, 'fields_json');
           }
           const updates: any = {};
           if (args.name) updates.label = args.name;
@@ -616,7 +636,7 @@ export function setupMcp(server: Server, store: Store) {
         case 'create_flow': {
           const sourceId = args.source_id as string;
           const targetId = args.target_id as string;
-          const label = (args.label as string) || `${sourceId.slice(0, 6)} → ${targetId.slice(0, 6)}`;
+          const label = (args.label as string) || `${sourceId.slice(0, 6)} -> ${targetId.slice(0, 6)}`;
           const edge = await store.addEdge(args.project_id as string, {
             sourceId, targetId, sourcePort: 'r', targetPort: 'l', label, dir: (args.dir as string) || 'fwd'
           });
@@ -725,10 +745,10 @@ export function setupMcp(server: Server, store: Store) {
           let nodeIds: string[] = [];
           let edgeIds: string[] = [];
           if (args.node_ids_json) {
-            try { nodeIds = JSON.parse(args.node_ids_json as string); } catch(e){}
+            nodeIds = parseJsonArrayArg<string>(args.node_ids_json, 'node_ids_json');
           }
           if (args.edge_ids_json) {
-            try { edgeIds = JSON.parse(args.edge_ids_json as string); } catch(e){}
+            edgeIds = parseJsonArrayArg<string>(args.edge_ids_json, 'edge_ids_json');
           }
           const flow = await store.addBusinessFlow(args.project_id as string, {
             name: args.name as string,
@@ -744,10 +764,10 @@ export function setupMcp(server: Server, store: Store) {
           if (args.name) updates.name = args.name;
           if (args.description) updates.description = args.description;
           if (args.node_ids_json) {
-            try { updates.nodeIds = JSON.parse(args.node_ids_json as string); } catch(e){}
+            updates.nodeIds = parseJsonArrayArg<string>(args.node_ids_json, 'node_ids_json');
           }
           if (args.edge_ids_json) {
-            try { updates.edgeIds = JSON.parse(args.edge_ids_json as string); } catch(e){}
+            updates.edgeIds = parseJsonArrayArg<string>(args.edge_ids_json, 'edge_ids_json');
           }
           const flow = await store.updateBusinessFlow(args.project_id as string, args.flow_id as string, updates);
           if (!flow) return { content: [{ type: 'text', text: 'Flow not found' }] };
