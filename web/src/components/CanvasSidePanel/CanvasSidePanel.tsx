@@ -2,7 +2,25 @@ import { useState } from 'react'
 import { useStore } from '../../store/useStore'
 import type { FlowNode } from '../../types'
 import EntityEditor from '../EntityEditor/EntityEditor'
-import { Plus, X, Box, Layers, GitMerge, Edit3, Check, Trash2, KeyRound, Link2, BadgeCheck, Crosshair, Database, Network } from 'lucide-react'
+import {
+  Plus,
+  X,
+  Box,
+  Layers,
+  GitMerge,
+  Edit3,
+  Check,
+  Trash2,
+  KeyRound,
+  Link2,
+  BadgeCheck,
+  Crosshair,
+  Database,
+  Network,
+  ListChecks,
+  AlertTriangle,
+  CircleDot,
+} from 'lucide-react'
 
 export default function CanvasSidePanel() {
   const project = useStore(s => s.currentProject())
@@ -17,17 +35,22 @@ export default function CanvasSidePanel() {
   const addBusinessFlow = useStore(s => s.addBusinessFlow)
   const deleteBusinessFlow = useStore(s => s.deleteBusinessFlow)
   const setEditingBusinessFlow = useStore(s => s.setEditingBusinessFlow)
+  const selectedRequirementId = useStore(s => s.selectedRequirementId)
+  const selectRequirement = useStore(s => s.selectRequirement)
+  const setLinkingRequirement = useStore(s => s.setLinkingRequirement)
   const [showEditor, setShowEditor] = useState(false)
   const [editorNode, setEditorNode] = useState<FlowNode | undefined>(undefined)
   const [showFlowCreateModal, setShowFlowCreateModal] = useState(false)
   const [newFlowName, setNewFlowName] = useState('')
   const [newFlowDesc, setNewFlowDesc] = useState('')
+  const [activeTab, setActiveTab] = useState<'structure' | 'requirements' | 'flows' | 'diagnostics'>('structure')
 
   if (!project) return null
 
   const unplacedNodes = project.nodes.filter(n => !n.regionId)
   const regions = project.regions
   const flows = project.businessFlows ?? []
+  const requirements = project.requirements ?? []
   const edgeCount = project.edges.length
   const selectedNode = selectedNodeIds.length === 1
     ? project.nodes.find(n => n.id === selectedNodeIds[0])
@@ -50,6 +73,32 @@ export default function CanvasSidePanel() {
       .filter(f => f.ref?.startsWith(`${selectedNode.id}.`))
       .map(f => ({ from: `${n.label}.${f.name}`, to: resolveRef(f.ref) })))
   } : { outgoing: [], incoming: [] }
+  const orphanEdges = project.edges.filter(e =>
+    !project.nodes.some(n => n.id === e.sourceId) || !project.nodes.some(n => n.id === e.targetId)
+  )
+  const unlinkedRequirements = requirements.filter(r =>
+    !(r.nodeIds?.length || r.edgeIds?.length || r.regionIds?.length)
+  )
+  const diagnosticItems = [
+    ...unplacedNodes.map(n => ({
+      id: `node-${n.id}`,
+      label: n.label,
+      meta: '未归入区域',
+      action: () => focusNodes([n.id]),
+    })),
+    ...unlinkedRequirements.map(r => ({
+      id: `req-${r.id}`,
+      label: r.title,
+      meta: '需求未关联结构',
+      action: () => selectRequirement(r.id),
+    })),
+    ...orphanEdges.map(e => ({
+      id: `edge-${e.id}`,
+      label: e.label || e.id,
+      meta: '连线端点缺失',
+      action: () => undefined,
+    })),
+  ]
   const focusNodes = (nodeIds: string[]) => {
     const targetNodes = project.nodes.filter(n => nodeIds.includes(n.id))
     if (targetNodes.length === 0) return
@@ -132,9 +181,36 @@ export default function CanvasSidePanel() {
               <div className="text-sm font-bold text-slate-900">{regions.length}</div>
             </div>
           </div>
+
+          <div className="mt-3 grid grid-cols-4 rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+            {[
+              { id: 'structure', label: '结构', icon: Database },
+              { id: 'requirements', label: '需求', icon: ListChecks },
+              { id: 'flows', label: '流程', icon: GitMerge },
+              { id: 'diagnostics', label: '诊断', icon: AlertTriangle },
+            ].map(item => {
+              const Icon = item.icon
+              const active = activeTab === item.id
+              return (
+                <button
+                  key={item.id}
+                  className={`flex min-w-0 items-center justify-center gap-1 rounded-md px-1.5 py-1.5 text-[11px] font-bold transition-colors ${
+                    active ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                  onClick={() => setActiveTab(item.id as typeof activeTab)}
+                  title={item.label}
+                >
+                  <Icon size={12} />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         <div className="mt-4 flex flex-col gap-5">
+          {activeTab === 'structure' && (
+            <>
           {selectedNode && (
           <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
             <div className="flex items-start justify-between gap-2">
@@ -333,8 +409,11 @@ export default function CanvasSidePanel() {
             )}
           </div>
         </div>
+            </>
+          )}
 
         {/* Business Flows */}
+        {activeTab === 'flows' && (
         <div className="flex flex-col gap-2.5 border-t border-zinc-100 pt-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
@@ -445,6 +524,100 @@ export default function CanvasSidePanel() {
             )}
           </div>
         </div>
+        )}
+
+        {activeTab === 'requirements' && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400">
+              <ListChecks size={12} />
+              <span>需求工作流 ({requirements.length})</span>
+            </div>
+
+            <div className="space-y-2">
+              {requirements.map(req => {
+                const selected = selectedRequirementId === req.id
+                const linkedCount = (req.nodeIds?.length ?? 0) + (req.edgeIds?.length ?? 0) + (req.regionIds?.length ?? 0)
+                return (
+                  <div
+                    key={req.id}
+                    className={`rounded-lg border p-3 transition-colors ${
+                      selected ? 'border-indigo-200 bg-indigo-50/60 ring-1 ring-indigo-100' : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <button
+                      className="flex w-full items-start gap-2 text-left"
+                      onClick={() => selectRequirement(selected ? null : req.id)}
+                    >
+                      <CircleDot size={13} className={selected ? 'mt-0.5 shrink-0 text-indigo-600' : 'mt-0.5 shrink-0 text-slate-400'} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-bold text-slate-900" title={req.title}>{req.title}</div>
+                        <div className="mt-1 flex items-center gap-2 text-[10px] font-semibold text-slate-400">
+                          <span>{req.priority}</span>
+                          <span>/</span>
+                          <span>{req.status}</span>
+                          <span>/</span>
+                          <span>{linkedCount} 关联</span>
+                        </div>
+                      </div>
+                    </button>
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                        onClick={() => selectRequirement(req.id)}
+                      >
+                        详情
+                      </button>
+                      <button
+                        className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700 transition-colors hover:bg-indigo-100"
+                        onClick={() => {
+                          selectRequirement(req.id)
+                          setLinkingRequirement(req.id)
+                        }}
+                      >
+                        关联画布
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              {requirements.length === 0 && (
+                <div className="rounded-lg border border-dashed border-slate-200 bg-white/70 py-8 text-center text-xs text-slate-400">
+                  暂无需求
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'diagnostics' && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400">
+              <AlertTriangle size={12} />
+              <span>诊断清单 ({diagnosticItems.length})</span>
+            </div>
+            {diagnosticItems.length === 0 ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-4 text-xs font-semibold text-emerald-700">
+                暂无结构告警
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {diagnosticItems.map(item => (
+                  <button
+                    key={item.id}
+                    className="flex w-full items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-left transition-colors hover:bg-amber-50"
+                    onClick={item.action}
+                  >
+                    <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-600" />
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-bold text-amber-950" title={item.label}>{item.label}</div>
+                      <div className="mt-0.5 text-[10px] font-semibold text-amber-700">{item.meta}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         </div>
       </div>
 
