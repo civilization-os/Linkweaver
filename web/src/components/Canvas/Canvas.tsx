@@ -276,6 +276,7 @@ export default function Canvas() {
   const searchQuery = store.searchQuery.toLowerCase()
   const activeRequirement = project?.requirements?.find(r => r.id === store.selectedRequirementId)
   const linkingRequirementId = store.linkingRequirementId
+  const isOverviewZoom = store.viewport.scale < 0.65
   const [editNodeId, setEditNodeId] = useState<string | null>(null)
   const [showCreateNodeEditor, setShowCreateNodeEditor] = useState(false)
   const [editEdgeId, setEditEdgeId] = useState<string | null>(null)
@@ -1474,7 +1475,7 @@ export default function Canvas() {
               const highlightedNodeIds = hoveredFieldInfo ? Array.from(highlightedFieldSet).map(k => k.split('.')[0]) : []
               const isFieldCascadeActive = hoveredFieldInfo && edgeObj && highlightedNodeIds.includes(edgeObj.sourceId) && highlightedNodeIds.includes(edgeObj.targetId)
 
-              const labelOpacity = (isHovered || isFieldCascadeActive) ? 1 : (isLabelActive ? 1 : 0.15)
+              const labelOpacity = isOverviewZoom && !isHovered && !isFieldCascadeActive ? 0 : ((isHovered || isFieldCascadeActive) ? 1 : (isLabelActive ? 1 : 0.15))
               return (
                 <div
                   key={`lbl-${pos.id}`}
@@ -1513,12 +1514,14 @@ export default function Canvas() {
             return !r?.collapsed
           }).map(node => {
             const density = store.canvasDensity
+            const effectiveDensity = isOverviewZoom ? 'compact' : density
             const isFlow = isFlowNodeType(node.type)
             const keyFields = (node.fields ?? []).filter(f => f.keyRole || f.ref || f.required)
-            const displayedFields = density === 'standard' ? (keyFields.length > 0 ? keyFields : (node.fields ?? []).slice(0, 4)) : (node.fields ?? [])
+            const displayedFields = effectiveDensity === 'standard' ? (keyFields.length > 0 ? keyFields : (node.fields ?? []).slice(0, 4)) : (node.fields ?? [])
             const pkCount = (node.fields ?? []).filter(f => f.keyRole === 'primary').length
             const fkCount = (node.fields ?? []).filter(f => f.keyRole === 'foreign' || f.ref).length
             const ukCount = (node.fields ?? []).filter(f => f.keyRole === 'unique').length
+            const fieldCount = node.fields?.length ?? 0
             const inReq = activeRequirement ? (activeRequirement.nodeIds || []).includes(node.id) : false
             const isNodeActive = searchQuery ? (
               node.label.toLowerCase().includes(searchQuery) ||
@@ -1556,7 +1559,7 @@ export default function Canvas() {
                 className={`node-el absolute z-20 cursor-move transition-colors transition-shadow duration-200 ${
                   isFlow
                     ? `flow-node ${flowShapeClass(node.type)} flex items-center justify-center hover:drop-shadow-[0_2px_8px_rgba(0,0,0,0.18)]`
-                    : `canvas-node-card bg-white/96 border ${density === 'compact' ? 'p-2.5 min-w-44' : `p-3.5 ${store.showThreeColumns ? 'min-w-[280px]' : 'min-w-56'}`} flex flex-col group/node hover:ring-0`
+                    : `canvas-node-card bg-white/96 border ${effectiveDensity === 'compact' ? 'p-2.5 min-w-44' : `p-3.5 ${store.showThreeColumns ? 'min-w-[280px]' : 'min-w-56'}`} flex flex-col group/node hover:ring-0`
                 } ${
                   !isNodeActive ? 'opacity-15 grayscale shadow-none' : (
                     isFlow ? (
@@ -1588,7 +1591,7 @@ export default function Canvas() {
                 const nodeContainsHoveredField = hoveredFieldInfo && node.fields?.some(f => highlightedFieldSet.has(`${node.id}.${f.name}`))
                 return (
                   <>
-                    <div className={`flex items-center justify-between ${density === 'compact' ? 'pb-0 border-b-0 mb-0' : 'pb-2 border-b border-slate-200/80 mb-1'} ${
+                    <div className={`flex items-center justify-between ${effectiveDensity === 'compact' ? 'pb-0 border-b-0 mb-0' : 'pb-2 border-b border-slate-200/80 mb-1'} ${
                       node.collapsedFields && nodeContainsHoveredField ? 'bg-blue-50 rounded-md px-2 -mx-2 ring-1 ring-blue-200 transition-all duration-300' : 'transition-all duration-300'
                     }`}>
                       <div 
@@ -1634,19 +1637,20 @@ export default function Canvas() {
                         >
                           <Focus size={13} />
                         </button>
-                        {node.sublabel && density !== 'compact' && (
+                        {node.sublabel && effectiveDensity !== 'compact' && (
                           <span className="text-[9px] bg-slate-100 text-slate-500 font-semibold px-1.5 py-0.5 rounded border border-slate-200/60">
                             {node.sublabel}
                           </span>
                         )}
-                        {density === 'compact' && (pkCount > 0 || fkCount > 0 || ukCount > 0) && (
+                        {effectiveDensity === 'compact' && (fieldCount > 0 || pkCount > 0 || fkCount > 0 || ukCount > 0) && (
                           <span className="text-[9px] bg-slate-100 text-slate-500 font-semibold px-1.5 py-0.5 rounded border border-slate-200/60">
-                            {pkCount > 0 && `PK${pkCount} `}
-                            {fkCount > 0 && `FK${fkCount} `}
-                            {ukCount > 0 && `UK${ukCount}`}
+                            {fieldCount}F
+                            {pkCount > 0 && ` / PK${pkCount}`}
+                            {fkCount > 0 && ` / FK${fkCount}`}
+                            {ukCount > 0 && ` / UK${ukCount}`}
                           </span>
                         )}
-                        {node.fields && node.fields.length > 0 && density !== 'compact' && (
+                        {node.fields && node.fields.length > 0 && effectiveDensity !== 'compact' && (
                           <button 
                             onClick={(e) => { e.stopPropagation(); store.toggleNodeFieldsCollapse(node.id) }}
                             className="p-0.5 hover:bg-zinc-100 rounded text-zinc-400 hover:text-zinc-600 transition-colors cursor-pointer"
@@ -1659,13 +1663,13 @@ export default function Canvas() {
                     </div>
 
                     {/* Fields */}
-                    {density === 'standard' && !node.collapsedFields && node.fields && node.fields.length > displayedFields.length && (
+                    {effectiveDensity === 'standard' && !node.collapsedFields && node.fields && node.fields.length > displayedFields.length && (
                       <div className="mt-1 text-[9px] font-semibold text-zinc-400">
                         显示 {displayedFields.length}/{node.fields.length} 个关键字段
                       </div>
                     )}
 
-                    {density !== 'compact' && !node.collapsedFields && node.fields && displayedFields.length > 0 && (
+                    {effectiveDensity !== 'compact' && !node.collapsedFields && node.fields && displayedFields.length > 0 && (
                       <div className="flex flex-col rounded-md overflow-hidden border border-slate-100">
                         {displayedFields.map((f, i) => {
                           const isHoverMatched = hoveredFieldInfo && highlightedFieldSet.has(`${node.id}.${f.name}`)

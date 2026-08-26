@@ -17,6 +17,8 @@ import {
   ListChecks,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Target,
 } from 'lucide-react'
 
@@ -34,6 +36,7 @@ export default function App() {
   const activeBusinessFlowId = useStore(s => s.activeBusinessFlowId)
   const selectedRequirementId = useStore(s => s.selectedRequirementId)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false)
 
   const nodes = project?.nodes ?? []
   const edges = project?.edges ?? []
@@ -156,6 +159,13 @@ export default function App() {
                         {activeFlow ? activeFlow.name : unplacedCount > 0 ? `${unplacedCount} 个独立实体` : '结构已归位'}
                       </span>
                     </div>
+                    <button
+                      className="no-drag flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+                      onClick={() => setInspectorCollapsed(v => !v)}
+                      title={inspectorCollapsed ? '展开检查器' : '收起检查器'}
+                    >
+                      {inspectorCollapsed ? <PanelRightOpen size={15} /> : <PanelRightClose size={15} />}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -165,7 +175,7 @@ export default function App() {
 
             <div className="flex-1 flex min-h-0 relative overflow-hidden">
               <Canvas />
-              {!focusMode && <CanvasSidePanel />}
+              {!focusMode && !inspectorCollapsed && <CanvasSidePanel />}
             </div>
           </div>
         )}
