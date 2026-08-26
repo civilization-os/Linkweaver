@@ -8,8 +8,11 @@ import {
   ArrowRightLeft,
   Layers,
   ClipboardList,
-  Settings,
-  Workflow
+  Workflow,
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  ArrowRight,
 } from 'lucide-react'
 import SettingsModal from '../SettingsModal/SettingsModal'
 import { isFlowNodeType } from '../../types'
@@ -24,6 +27,20 @@ export default function Overview() {
   const [newName, setNewName] = useState('')
   const [showSettings, setShowSettings] = useState(false)
 
+  const activeProject = projects.find(p => p.id === activeProjectId) ?? projects[0]
+  const activeStats = activeProject ? {
+    entities: activeProject.nodes.filter(n => n.type === 'entity' || n.type === 'nested').length,
+    flowNodes: activeProject.nodes.filter(n => isFlowNodeType(n.type)).length,
+    edges: activeProject.edges.length,
+    regions: activeProject.regions.length,
+    requirements: activeProject.requirements.length,
+    flows: activeProject.businessFlows?.length ?? 0,
+    unplaced: activeProject.nodes.filter(n => !n.regionId).length,
+    unlinkedRequirements: activeProject.requirements.filter(r =>
+      !(r.nodeIds?.length || r.edgeIds?.length || r.regionIds?.length)
+    ).length,
+  } : null
+
   const handleCreate = () => {
     const name = newName.trim()
     if (!name) return
@@ -32,149 +49,236 @@ export default function Overview() {
     setNewName('')
   }
 
+  const projectHealth = !activeStats
+    ? '暂无项目'
+    : activeStats.unplaced > 0
+      ? `${activeStats.unplaced} 个实体未归区`
+      : activeStats.unlinkedRequirements > 0
+        ? `${activeStats.unlinkedRequirements} 个需求未关联`
+        : '结构可继续推进'
+
   return (
-    <div className="flex-1 flex flex-col h-full bg-gradient-to-br from-white via-zinc-50 to-indigo-50/50 select-none">
-      {/* Title Header — 固定条:整行作为 Electron 窗口拖动区域。必须放在滚动容器外,
-          否则拖动会被 overflow-y-auto 容器解释为滚动,窗口无法移动(与 Toolbar 同模式)。 */}
-      <div className="drag-region shrink-0 flex justify-between items-center px-10 pt-9 pb-6 border-b border-zinc-200/60">
-        <div className="flex items-baseline gap-2.5">
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">项目概览</h1>
-          <span className="text-[11px] font-semibold text-indigo-500 tracking-wide">OVERVIEW</span>
-        </div>
-        {/* pr-[120px]:右侧留出窗口控制按钮区(titleBarOverlay 高 48px、宽约 150px),
-            避免按钮落在系统最小化/最大化/关闭按钮下方导致悬停/点击冲突 */}
-        <div className="no-drag flex items-center gap-3 pr-[120px]">
-          <button
-            className="flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-500 active:bg-indigo-700 px-4 py-2 rounded-lg text-sm font-semibold shadow-sm shadow-indigo-200/60 transition-all duration-150 cursor-pointer"
-            onClick={() => setShowNew(true)}
-          >
-            <Plus size={16} />
-            <span>新建项目</span>
-          </button>
+    <div className="flex h-full flex-1 flex-col bg-slate-100 select-none">
+      <div className="drag-region shrink-0 border-b border-slate-200/80 bg-slate-50/95 px-8 py-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold tracking-tight text-slate-950">项目工作台</h1>
+              <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500">WORKBENCH</span>
+            </div>
+            <div className="mt-1 text-xs font-medium text-slate-500">{activeProject?.name ?? '创建项目后开始建模'}</div>
+          </div>
+
+          <div className="no-drag flex items-center gap-3 pr-[120px]">
+            {activeProject && (
+              <button
+                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+                onClick={() => switchProject(activeProject.id)}
+              >
+                <FolderOpen size={15} />
+                进入画布
+              </button>
+            )}
+            <button
+              className="flex items-center gap-2 rounded-lg bg-slate-950 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-slate-800"
+              onClick={() => setShowNew(true)}
+            >
+              <Plus size={15} />
+              新建项目
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* 可滚动内容区 */}
-      <div className="flex-1 overflow-y-auto px-10 pb-10">
-        {/* Inline Create Form */}
-      {showNew && (
-        <div className="flex items-center gap-3 p-4 mb-8 bg-white/90 backdrop-blur border border-indigo-100 rounded-xl shadow-lg shadow-indigo-100/40 animate-in fade-in slide-in-from-top-4 duration-200">
-          <input
-            className="flex-1 max-w-sm px-3.5 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-lg outline-none focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all placeholder-zinc-400"
-            placeholder="输入新项目的名称..."
-            value={newName}
-            onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') handleCreate()
-              if (e.key === 'Escape') {
-                setShowNew(false)
-                setNewName('')
-              }
-            }}
-            autoFocus
-          />
-          <button
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-sm shadow-indigo-200/60 transition-colors cursor-pointer"
-            onClick={handleCreate}
-          >
-            创建
-          </button>
-          <button
-            className="px-4 py-2 bg-white hover:bg-zinc-50 text-zinc-500 border border-zinc-200 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-            onClick={() => {
-              setShowNew(false)
-              setNewName('')
-            }}
-          >
-            取消
-          </button>
-        </div>
-      )}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <aside className="w-[280px] shrink-0 overflow-y-auto border-r border-slate-200/80 bg-white/80 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase text-slate-400">项目队列</span>
+            <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">{projects.length}</span>
+          </div>
 
-      {/* Project Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projects.map(p => {
-          const isActive = p.id === activeProjectId
-          const entitiesCount = (p.nodes ?? []).filter((n: any) => n.type === 'entity' || n.type === 'nested').length
-          const flowCount = (p.nodes ?? []).filter((n: any) => isFlowNodeType(n.type)).length
-          const dataFlowCount = (p.edges ?? []).length
-          const regionsCount = (p.regions ?? []).length
-          const reqsCount = (p.requirements ?? []).length
-
-          return (
-            <div
-              key={p.id}
-              className={`flex flex-col bg-white border rounded-xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.05)] hover:shadow-xl hover:shadow-indigo-100/50 hover:border-indigo-200 hover:-translate-y-0.5 transition-all duration-200 relative group overflow-hidden ${
-                isActive ? 'border-indigo-400 ring-2 ring-indigo-500/15' : 'border-zinc-200/80'
-              }`}
-            >
-              {/* 顶部渐变细条 */}
-              <div className={`absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-indigo-500 via-sky-400 to-emerald-400 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity duration-200`} />
-              <div className="flex justify-between items-start mb-4">
-                <div className="min-w-0 pr-4">
-                  <h3 className="text-base font-bold text-zinc-800 truncate tracking-tight">{p.name}</h3>
-                  <p className="text-[10px] text-indigo-400/80 font-semibold uppercase tracking-wider mt-0.5">LINKWEAVER · 数据模型</p>
-                </div>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">
-                  {p.version}
-                </span>
-              </div>
-
-              {/* Stats Block — 语义化配色 */}
-              <div className="grid grid-cols-5 gap-1 py-4 my-4 bg-white/60 border-y border-zinc-100 rounded-lg px-1.5 text-center">
-                <div className="flex flex-col items-center rounded-lg py-1 hover:bg-indigo-50/60 transition-colors duration-150">
-                  <Database size={14} className="text-indigo-500 mb-1" />
-                  <span className="text-sm font-bold text-zinc-800">{entitiesCount}</span>
-                  <span className="text-[9px] text-zinc-400 font-medium tracking-wide">实体</span>
-                </div>
-                <div className="flex flex-col items-center rounded-lg py-1 hover:bg-violet-50/60 transition-colors duration-150">
-                  <Workflow size={14} className="text-violet-500 mb-1" />
-                  <span className="text-sm font-bold text-zinc-800">{flowCount}</span>
-                  <span className="text-[9px] text-zinc-400 font-medium tracking-wide">流程</span>
-                </div>
-                <div className="flex flex-col items-center rounded-lg py-1 hover:bg-sky-50/60 transition-colors duration-150">
-                  <ArrowRightLeft size={14} className="text-sky-500 mb-1" />
-                  <span className="text-sm font-bold text-zinc-800">{dataFlowCount}</span>
-                  <span className="text-[9px] text-zinc-400 font-medium tracking-wide">连线</span>
-                </div>
-                <div className="flex flex-col items-center rounded-lg py-1 hover:bg-emerald-50/60 transition-colors duration-150">
-                  <Layers size={14} className="text-emerald-500 mb-1" />
-                  <span className="text-sm font-bold text-zinc-800">{regionsCount}</span>
-                  <span className="text-[9px] text-zinc-400 font-medium tracking-wide">区域</span>
-                </div>
-                <div className="flex flex-col items-center rounded-lg py-1 hover:bg-amber-50/60 transition-colors duration-150">
-                  <ClipboardList size={14} className="text-amber-500 mb-1" />
-                  <span className="text-sm font-bold text-zinc-800">{reqsCount}</span>
-                  <span className="text-[9px] text-zinc-400 font-medium tracking-wide">需求</span>
-                </div>
-              </div>
-
-              {/* Card Actions */}
-              <div className="flex items-center gap-2 mt-auto">
-                <button
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-4 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm shadow-indigo-200/50 transition-all cursor-pointer"
-                  onClick={() => switchProject(p.id)}
-                >
-                  <FolderOpen size={14} />
-                  <span>打开项目</span>
-                </button>
-                {projects.length > 1 && (
-                  <button
-                    className="p-2 border border-zinc-200 text-zinc-400 hover:text-red-500 hover:bg-red-50 hover:border-red-200 rounded-lg transition-all cursor-pointer"
-                    onClick={() => deleteProject(p.id)}
-                    title="删除项目"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                )}
+          {showNew && (
+            <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
+              <input
+                className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold outline-none focus:border-slate-400"
+                placeholder="项目名称"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleCreate()
+                  if (e.key === 'Escape') {
+                    setShowNew(false)
+                    setNewName('')
+                  }
+                }}
+                autoFocus
+              />
+              <div className="mt-2 flex gap-2">
+                <button className="flex-1 rounded-md bg-slate-950 px-2 py-1.5 text-[11px] font-bold text-white" onClick={handleCreate}>创建</button>
+                <button className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-500" onClick={() => setShowNew(false)}>取消</button>
               </div>
             </div>
-          )
-        })}
+          )}
+
+          <div className="space-y-2">
+            {projects.map(p => {
+              const isActive = p.id === activeProject?.id
+              return (
+                <button
+                  key={p.id}
+                  className={`group flex w-full items-center gap-2 rounded-lg border p-3 text-left transition-colors ${
+                    isActive ? 'border-slate-900 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                  onClick={() => useStore.setState({ activeProjectId: p.id })}
+                >
+                  <FolderOpen size={14} className="shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-bold" title={p.name}>{p.name}</div>
+                    <div className={isActive ? 'mt-0.5 text-[10px] text-slate-300' : 'mt-0.5 text-[10px] text-slate-400'}>
+                      {p.nodes.length} 节点 / {p.edges.length} 连线
+                    </div>
+                  </div>
+                  {projects.length > 1 && (
+                    <span
+                      className={`rounded-md p-1 opacity-0 transition-opacity group-hover:opacity-100 ${isActive ? 'hover:bg-white/10' : 'hover:bg-red-50 hover:text-red-600'}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteProject(p.id)
+                      }}
+                      title="删除项目"
+                    >
+                      <Trash2 size={13} />
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </aside>
+
+        <main className="min-w-0 flex-1 overflow-y-auto p-6">
+          {activeProject && activeStats ? (
+            <div className="mx-auto flex max-w-5xl flex-col gap-5">
+              <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="truncate text-lg font-bold text-slate-950">{activeProject.name}</h2>
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500">{activeProject.version}</span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-xs font-semibold text-slate-500">
+                      {activeStats.unplaced || activeStats.unlinkedRequirements ? (
+                        <AlertTriangle size={14} className="text-amber-500" />
+                      ) : (
+                        <CheckCircle2 size={14} className="text-emerald-500" />
+                      )}
+                      <span>{projectHealth}</span>
+                    </div>
+                  </div>
+                  <button
+                    className="flex shrink-0 items-center gap-2 rounded-lg bg-slate-950 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-slate-800"
+                    onClick={() => switchProject(activeProject.id)}
+                  >
+                    继续工作
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+
+                <div className="mt-5 grid grid-cols-5 gap-2">
+                  {[
+                    { label: '实体', value: activeStats.entities, icon: Database },
+                    { label: '流程节点', value: activeStats.flowNodes, icon: Workflow },
+                    { label: '连线', value: activeStats.edges, icon: ArrowRightLeft },
+                    { label: '区域', value: activeStats.regions, icon: Layers },
+                    { label: '需求', value: activeStats.requirements, icon: ClipboardList },
+                  ].map(item => {
+                    const Icon = item.icon
+                    return (
+                      <div key={item.label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500">
+                          <Icon size={12} />
+                          {item.label}
+                        </div>
+                        <div className="mt-1 text-xl font-bold text-slate-950">{item.value}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+
+              <section className="grid grid-cols-2 gap-5">
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-950">近期需求</h3>
+                    <span className="text-[10px] font-bold text-slate-400">{activeProject.requirements.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {activeProject.requirements.slice(0, 5).map(req => (
+                      <div key={req.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="truncate text-xs font-bold text-slate-800" title={req.title}>{req.title}</div>
+                        <div className="mt-1 text-[10px] font-semibold text-slate-400">
+                          {req.priority} / {req.status} / {(req.nodeIds?.length ?? 0) + (req.edgeIds?.length ?? 0) + (req.regionIds?.length ?? 0)} 关联
+                        </div>
+                      </div>
+                    ))}
+                    {activeProject.requirements.length === 0 && (
+                      <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-xs text-slate-400">暂无需求</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-950">业务流程</h3>
+                    <span className="text-[10px] font-bold text-slate-400">{activeStats.flows}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {(activeProject.businessFlows ?? []).slice(0, 5).map(flow => (
+                      <div key={flow.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="truncate text-xs font-bold text-slate-800" title={flow.name}>{flow.name}</div>
+                        <div className="mt-1 text-[10px] font-semibold text-slate-400">{flow.nodeIds.length} 节点 / {flow.edgeIds.length} 连线</div>
+                      </div>
+                    ))}
+                    {(activeProject.businessFlows ?? []).length === 0 && (
+                      <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-xs text-slate-400">暂无流程</div>
+                    )}
+                  </div>
+                </div>
+              </section>
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">暂无项目</div>
+          )}
+        </main>
+
+        <aside className="w-[360px] shrink-0 overflow-y-auto border-l border-slate-200/80 bg-white/80 p-4">
+          <div className="mb-3 flex items-center gap-1.5 text-[11px] font-bold uppercase text-slate-400">
+            <Clock3 size={13} />
+            工作队列
+          </div>
+          {activeStats && (
+            <div className="space-y-2">
+              <div className={`rounded-lg border px-3 py-3 ${activeStats.unplaced ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                <div className="text-xs font-bold">结构归位</div>
+                <div className="mt-1 text-[11px] font-semibold opacity-80">{activeStats.unplaced ? `${activeStats.unplaced} 个实体需要归区` : '全部实体已归区'}</div>
+              </div>
+              <div className={`rounded-lg border px-3 py-3 ${activeStats.unlinkedRequirements ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                <div className="text-xs font-bold">需求追踪</div>
+                <div className="mt-1 text-[11px] font-semibold opacity-80">{activeStats.unlinkedRequirements ? `${activeStats.unlinkedRequirements} 个需求未关联画布` : '需求已关联结构'}</div>
+              </div>
+              <button
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-3 py-2.5 text-xs font-bold text-white transition-colors hover:bg-slate-800"
+                onClick={() => activeProject && switchProject(activeProject.id)}
+              >
+                打开项目工作台
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          )}
+        </aside>
       </div>
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
-      </div>
     </div>
   )
 }
