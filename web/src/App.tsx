@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Canvas from './components/Canvas/Canvas'
 import CanvasSidePanel from './components/CanvasSidePanel/CanvasSidePanel'
 import Sidebar from './components/Sidebar/Sidebar'
@@ -15,7 +15,8 @@ import {
   GitMerge,
   Layers3,
   ListChecks,
-  PanelRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   Target,
 } from 'lucide-react'
 
@@ -32,7 +33,7 @@ export default function App() {
   const selectedNodeIds = useStore(s => s.selectedNodeIds)
   const activeBusinessFlowId = useStore(s => s.activeBusinessFlowId)
   const selectedRequirementId = useStore(s => s.selectedRequirementId)
-  const setPage = useStore(s => s.setPage)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   const nodes = project?.nodes ?? []
   const edges = project?.edges ?? []
@@ -88,7 +89,7 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-100 font-sans text-zinc-950">
       {/* Sidebar Navigation */}
-      {!focusMode && <Sidebar />}
+      {!focusMode && !sidebarCollapsed && <Sidebar />}
 
       {/* Main Workspace Area */}
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
@@ -102,10 +103,10 @@ export default function App() {
                   <div className="flex min-w-[220px] flex-1 items-center gap-3">
                     <button
                       className="no-drag flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
-                      onClick={() => setPage('overview')}
-                      title="返回项目工作台"
+                      onClick={() => setSidebarCollapsed(v => !v)}
+                      title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
                     >
-                      <PanelRight size={17} />
+                      {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
                     </button>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
