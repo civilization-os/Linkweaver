@@ -1,13 +1,11 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { useStore } from '../../store/useStore'
-import type { FlowNode } from '../../types'
+import { isFlowNodeType, type FlowNode } from '../../types'
 import EdgeEditor from '../EdgeEditor/EdgeEditor'
 import EntityEditor from '../EntityEditor/EntityEditor'
 import MiniMap from './MiniMap'
-import { ChevronDown, ChevronUp, Table, User, Cog, Box, Key, Link2, AlignLeft, AlignCenter, AlignRight, LayoutGrid, Focus } from 'lucide-react'
+import { ChevronDown, ChevronUp, Table, User, Cog, Box, Key, Link2, AlignLeft, AlignCenter, AlignRight, LayoutGrid, Focus, Plus, MousePointer2, GitBranch, Layers3 } from 'lucide-react'
 
-const BASE_CANVAS_W = 6000
-const BASE_CANVAS_H = 4000
 const GRID_SIZE = 40
 
 function getContrastColor(hexColor: string) {
@@ -19,6 +17,20 @@ function getContrastColor(hexColor: string) {
   const b = parseInt(color.substring(4, 6), 16);
   const yiq = (((isNaN(r) ? 240 : r) * 299) + ((isNaN(g) ? 240 : g) * 587) + ((isNaN(b) ? 240 : b) * 114)) / 1000;
   return (yiq >= 140) ? '#18181b' : '#ffffff';
+}
+
+/** CSS shape + color classes for flowchart node types (see index.css .flow-* rules). */
+function flowShapeClass(type: string): string {
+  switch (type) {
+    case 'flowStart': return 'flow-capsule bg-emerald-50 text-emerald-700 border-emerald-200'
+    case 'flowEnd': return 'flow-capsule bg-rose-50 text-rose-700 border-rose-200'
+    case 'flowProcess': return 'flow-process bg-white text-zinc-800 border-zinc-300'
+    case 'flowDecision': return 'flow-decision bg-amber-100 text-amber-800'
+    case 'flowIo': return 'flow-io bg-sky-100 text-sky-800'
+    case 'flowDocument': return 'flow-document bg-zinc-100 text-zinc-800 border-zinc-300'
+    case 'flowDatabase': return 'flow-database bg-indigo-100 text-indigo-800 border-indigo-200'
+    default: return ''
+  }
 }
 
 function getNodeRect(node: FlowNode, el: HTMLElement | null) {
@@ -258,15 +270,28 @@ export default function Canvas() {
   }, [hoveredFieldInfo, project?.nodes])
 
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
-  const normalizeFieldName = useCallback((name: string) => name.toLowerCase().replace(/[\s_-]/g, ''), [])
   const selectedNodeIds = store.selectedNodeIds
   const selectedEdgeId = store.selectedEdgeId
+  const selectedNode = selectedNodeIds.length === 1 ? nodes.find(n => n.id === selectedNodeIds[0]) : undefined
   const searchQuery = store.searchQuery.toLowerCase()
   const activeRequirement = project?.requirements?.find(r => r.id === store.selectedRequirementId)
   const linkingRequirementId = store.linkingRequirementId
   const [editNodeId, setEditNodeId] = useState<string | null>(null)
+  const [showCreateNodeEditor, setShowCreateNodeEditor] = useState(false)
   const [editEdgeId, setEditEdgeId] = useState<string | null>(null)
   const [inlineEditNodeId, setInlineEditNodeId] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState<{ fromId: string; fromPort: string; mouseX: number; mouseY: number } | null>(null)
+  const [newEdgeTarget, setNewEdgeTarget] = useState<{ sourceId: string; targetId: string } | null>(null)
+  const [selectionBox, setSelectionBox] = useState<{ startX: number, startY: number, currentX: number, currentY: number } | null>(null)
+  const canvasModeLabel = linkingRequirementId
+    ? '关联需求'
+    : store.editingBusinessFlowId
+      ? '编辑业务流程'
+      : connecting
+        ? '连接节点'
+        : selectedNodeIds.length > 0 || selectedEdgeId
+          ? '检查选择'
+          : '浏览画布'
 
   useEffect(() => {
     if (!activeRequirement || !viewportRef.current) return
@@ -412,7 +437,7 @@ export default function Canvas() {
       
       const p1 = getSpreadPort(effFrom.id, effFrom.rect, p1Str)
       const p2 = getSpreadPort(effTo.id, effTo.rect, p2Str)
-      const { d, points } = orthogonalEdgePath(p1, p1.dir, p2, p2.dir, 15)
+      const { d, points } = orthogonalEdgePath(p1, p1.dir, p2, p2.dir, 24)
       layouts[edge.id] = { p1, p2, d, points }
     })
     
@@ -784,7 +809,7 @@ export default function Canvas() {
       const p1 = getSpreadPort(effFrom.id, effFrom.rect, p1Str)
       const p2 = getSpreadPort(effTo.id, effTo.rect, p2Str)
       
-      const { d: pathData } = orthogonalEdgePath(p1, p1.dir, p2, p2.dir, 15)
+      const { d: pathData } = orthogonalEdgePath(p1, p1.dir, p2, p2.dir, 24)
       
       const edgeG = document.querySelector(`g[data-edge-id="${edge.id}"]`)
       if (edgeG) {
@@ -1019,27 +1044,61 @@ export default function Canvas() {
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
   }, [store, nodes, regions])
 
-  const [connecting, setConnecting] = useState<{ fromId: string; fromPort: string; mouseX: number; mouseY: number } | null>(null)
-  const [newEdgeTarget, setNewEdgeTarget] = useState<{ sourceId: string; targetId: string } | null>(null)
-  const [selectionBox, setSelectionBox] = useState<{ startX: number, startY: number, currentX: number, currentY: number } | null>(null)
-
-
-
-
   return (
     <>
       <div 
-        className="canvas-container flex-1 relative overflow-hidden bg-zinc-50/60" 
+        className="canvas-container canvas-surface flex-1 relative overflow-hidden" 
         ref={viewportRef}
         style={{
           ...(store.showGrid ? {
-            backgroundImage: `linear-gradient(to right, #e4e4e7 1px, transparent 1px), linear-gradient(to bottom, #e4e4e7 1px, transparent 1px)`,
-            backgroundSize: `${GRID_SIZE * store.viewport.scale}px ${GRID_SIZE * store.viewport.scale}px`,
+            backgroundSize: `${GRID_SIZE * store.viewport.scale}px ${GRID_SIZE * store.viewport.scale}px, ${GRID_SIZE * store.viewport.scale}px ${GRID_SIZE * store.viewport.scale}px, ${GRID_SIZE * store.viewport.scale}px ${GRID_SIZE * store.viewport.scale}px`,
             backgroundPosition: `${store.viewport.x}px ${store.viewport.y}px`,
-          } : {})
+          } : {
+            backgroundImage: 'none',
+          })
         }}
         onMouseDown={onLayerMouseDown}
       >
+        <div className="pointer-events-none absolute left-4 top-4 z-40 flex max-w-[calc(100%-2rem)] items-center gap-2">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white/90 px-3 py-2 text-xs shadow-sm backdrop-blur">
+            <MousePointer2 size={14} className="text-slate-400" />
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-900">{canvasModeLabel}</span>
+              <span className="h-3 w-px bg-slate-200" />
+              <span className="text-slate-500">{Math.round(store.viewport.scale * 100)}%</span>
+            </div>
+          </div>
+          <div className="pointer-events-auto hidden items-center gap-1 rounded-lg border border-slate-200/80 bg-white/86 px-2 py-2 text-[11px] font-semibold text-slate-500 shadow-sm backdrop-blur md:flex">
+            <span className="inline-flex items-center gap-1 px-1.5"><Box size={12} />{nodes.length}</span>
+            <span className="inline-flex items-center gap-1 px-1.5"><GitBranch size={12} />{edges.length}</span>
+            <span className="inline-flex items-center gap-1 px-1.5"><Layers3 size={12} />{regions.length}</span>
+          </div>
+        </div>
+
+        {nodes.length === 0 && regions.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+            <div className="pointer-events-auto w-[360px] rounded-lg border border-slate-200 bg-white/92 p-5 text-center shadow-xl shadow-slate-900/5 backdrop-blur">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-slate-950 text-white">
+                <Plus size={18} />
+              </div>
+              <div className="mt-3 text-sm font-bold text-slate-950">从第一个实体开始</div>
+              <div className="mt-1 text-xs leading-5 text-slate-500">
+                建一个实体，补字段，再从锚点拖出连线。画布会保留选择、缩放和结构概览。
+              </div>
+              <button
+                className="mt-4 inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-slate-800"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowCreateNodeEditor(true)
+                }}
+              >
+                <Plus size={14} />
+                新建实体
+              </button>
+            </div>
+          </div>
+        )}
+
         <div
           id="canvas-layer"
           className="absolute top-0 left-0 transform-origin-[0_0] select-none"
@@ -1092,7 +1151,7 @@ export default function Canvas() {
                     store.toggleRegionInRequirement(linkingRequirementId, r.id)
                   }
                 }}
-                className={`region group/region absolute rounded-2xl pointer-events-none p-4 flex flex-col transition-colors transition-shadow duration-200 z-0 hover:ring-2 hover:ring-zinc-400/50 hover:shadow-md ${
+                className={`region canvas-region group/region absolute rounded-lg pointer-events-none p-4 flex flex-col transition-colors transition-shadow duration-200 z-0 hover:ring-2 hover:ring-zinc-400/40 hover:shadow-md ${
                   isCollapsed ? 'shadow-sm border-double border-4' : 'shadow-none'
                 } ${linkingRequirementId ? 'pointer-events-auto cursor-pointer' : ''} ${
                   isRegionInLinkMode ? 'ring-2 ring-purple-500 bg-purple-50/10' : ''
@@ -1112,10 +1171,10 @@ export default function Canvas() {
                   opacity: isRegionActive ? 1 : 0.2
                 }}
               >
-                <div className="region-header absolute top-0 left-0 right-0 h-9 rounded-t-2xl cursor-move pointer-events-auto hover:bg-zinc-950/[0.02] transition-colors" />
+                <div className="region-header absolute top-0 left-0 right-0 h-9 rounded-t-lg cursor-move pointer-events-auto hover:bg-zinc-950/[0.025] transition-colors" />
                 
                 <div 
-                  className="region-title absolute top-3 left-4 text-[10px] font-bold uppercase tracking-wider select-none pointer-events-none flex flex-col transition-colors"
+                  className="region-title absolute top-3 left-4 text-[10px] font-bold uppercase select-none pointer-events-none flex flex-col transition-colors"
                   style={{ color: getContrastColor(r.color) }}
                 >
                   <span>{r.title}</span>
@@ -1139,7 +1198,7 @@ export default function Canvas() {
                 </button>
 
                 {!isCollapsed && (
-                  <div className="region-resize absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize pointer-events-auto bg-gradient-to-br from-transparent to-zinc-200 hover:to-zinc-300 rounded-br-2xl transition-colors" />
+                  <div className="region-resize absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize pointer-events-auto bg-gradient-to-br from-transparent to-zinc-200 hover:to-zinc-300 rounded-br-lg transition-colors" />
                 )}
               </div>
             )
@@ -1148,32 +1207,33 @@ export default function Canvas() {
           {/* Render Connections SVG */}
           <svg className="absolute top-0 left-0 z-10 pointer-events-none overflow-visible" style={{ width: 1, height: 1 }}>
             <defs>
-              <marker id="arr-f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-                <path d="M 0 0 L 10 5 L 0 10 Z" fill="#a1a1aa" />
+              {/* 精致凹尾箭头(白描边 + 圆角线帽,更清晰圆润) */}
+              <marker id="arr-f" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto">
+                <path d="M 0.8 0.8 L 8.4 5 L 0.8 9.2 L 3 5 Z" fill="#a1a1aa" stroke="#ffffff" strokeWidth="0.9" strokeLinejoin="round" />
               </marker>
-              <marker id="arr-r" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 Z" fill="#a1a1aa" />
+              <marker id="arr-r" viewBox="0 0 10 10" refX="2.5" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
+                <path d="M 0.8 0.8 L 8.4 5 L 0.8 9.2 L 3 5 Z" fill="#a1a1aa" stroke="#ffffff" strokeWidth="0.9" strokeLinejoin="round" />
               </marker>
-              <marker id="arr-f-sel" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-                <path d="M 0 0 L 10 5 L 0 10 Z" fill="#18181b" />
+              <marker id="arr-f-sel" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto">
+                <path d="M 0.8 0.8 L 8.4 5 L 0.8 9.2 L 3 5 Z" fill="#18181b" stroke="#ffffff" strokeWidth="0.9" strokeLinejoin="round" />
               </marker>
-              <marker id="arr-r-sel" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 Z" fill="#18181b" />
+              <marker id="arr-r-sel" viewBox="0 0 10 10" refX="2.5" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
+                <path d="M 0.8 0.8 L 8.4 5 L 0.8 9.2 L 3 5 Z" fill="#18181b" stroke="#ffffff" strokeWidth="0.9" strokeLinejoin="round" />
               </marker>
-              <marker id="arr-f-flow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-                <path d="M 0 0 L 10 5 L 0 10 Z" fill="#4f46e5" />
+              <marker id="arr-f-flow" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto">
+                <path d="M 0.8 0.8 L 8.4 5 L 0.8 9.2 L 3 5 Z" fill="#4f46e5" stroke="#ffffff" strokeWidth="0.9" strokeLinejoin="round" />
               </marker>
-              <marker id="arr-r-flow" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 Z" fill="#4f46e5" />
+              <marker id="arr-r-flow" viewBox="0 0 10 10" refX="2.5" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
+                <path d="M 0.8 0.8 L 8.4 5 L 0.8 9.2 L 3 5 Z" fill="#4f46e5" stroke="#ffffff" strokeWidth="0.9" strokeLinejoin="round" />
               </marker>
-              <marker id="arr-f-dim" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-                <path d="M 0 0 L 10 5 L 0 10 Z" fill="#e4e4e7" />
+              <marker id="arr-f-dim" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto">
+                <path d="M 0.8 0.8 L 8.4 5 L 0.8 9.2 L 3 5 Z" fill="#e4e4e7" stroke="#ffffff" strokeWidth="0.9" strokeLinejoin="round" />
               </marker>
-              <marker id="arr-r-dim" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 Z" fill="#e4e4e7" />
+              <marker id="arr-r-dim" viewBox="0 0 10 10" refX="2.5" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
+                <path d="M 0.8 0.8 L 8.4 5 L 0.8 9.2 L 3 5 Z" fill="#e4e4e7" stroke="#ffffff" strokeWidth="0.9" strokeLinejoin="round" />
               </marker>
             </defs>
-            {edges.map((edge, idx) => {
+            {edges.map((edge) => {
               const effFrom = getEffectiveRectAndId(edge.sourceId)
               const effTo = getEffectiveRectAndId(edge.targetId)
               if (!effFrom || !effTo) return null
@@ -1198,8 +1258,8 @@ export default function Canvas() {
               const highlightedNodeIds = hoveredFieldInfo ? Array.from(highlightedFieldSet).map(k => k.split('.')[0]) : []
               const isFieldCascadeActive = hoveredFieldInfo && highlightedNodeIds.includes(edge.sourceId) && highlightedNodeIds.includes(edge.targetId)
 
-              let startColor = '#e4e4e7' // zinc-200
-              let endColor = '#71717a'   // zinc-500
+              let startColor = '#a1a1aa' // zinc-400 (原来 zinc-200 太淡,白底上几乎不可见)
+              let endColor = '#52525b'   // zinc-600
               
               if (isHovered || isFieldCascadeActive) {
                 startColor = '#a5b4fc' // indigo-300
@@ -1219,7 +1279,7 @@ export default function Canvas() {
                 endColor = '#18181b'   // zinc-900
               }
 
-              const strokeWidth = (isHovered || isFieldCascadeActive) ? '3' : activeRequirement ? (inReq ? '2.5' : '1') : activeFlow ? (inFlow ? '2.5' : '1') : (isSel ? '2' : '1.5')
+              const strokeWidth = (isHovered || isFieldCascadeActive) ? '3' : activeRequirement ? (inReq ? '2.5' : '1') : activeFlow ? (inFlow ? '2.5' : '1') : (isSel ? '2.5' : '2')
               const opacity = (isHovered || isFieldCascadeActive) ? 1 : activeRequirement ? (inReq ? 1 : 0.15) : activeFlow ? (inFlow ? 1 : 0.15) : edgeOpacity
 
               let x1 = points[0].x, y1 = points[0].y
@@ -1286,6 +1346,19 @@ export default function Canvas() {
                         />
                       )}
                     </>
+                  )}
+                  {/* 选中边:叠加 indigo 流动强调线 */}
+                  {isSel && (
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke="#6366f1"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      opacity="0.85"
+                      style={{ filter: 'drop-shadow(0 0 4px rgba(99,102,241,0.7))' }}
+                      className={`edge-flow ${edge.dir === 'rev' ? 'rev' : 'fwd'}`}
+                    />
                   )}
                 </g>
               )
@@ -1406,8 +1479,8 @@ export default function Canvas() {
                 <div
                   key={`lbl-${pos.id}`}
                   data-label-id={pos.id}
-                  className={`absolute text-[10px] font-semibold px-2 py-0.5 rounded whitespace-nowrap transition-colors duration-200 cursor-pointer pointer-events-auto ${
-                    (isHovered || isFieldCascadeActive) ? 'text-indigo-700 bg-indigo-50 border-indigo-300 shadow-md ring-1 ring-indigo-200 z-50' : 'text-zinc-500 bg-white border border-zinc-200/50 shadow-sm z-25'
+                  className={`canvas-edge-label absolute text-[10px] font-semibold px-2 py-0.5 rounded-md whitespace-nowrap transition-colors duration-200 cursor-pointer pointer-events-auto ${
+                    (isHovered || isFieldCascadeActive) ? 'text-indigo-700 bg-indigo-50/95 border border-indigo-300 ring-1 ring-indigo-200 z-50' : 'text-zinc-500 bg-white/82 border border-zinc-200/70 z-25'
                   }`}
                   style={{
                     left: pos.x - pos.width / 2,
@@ -1417,6 +1490,11 @@ export default function Canvas() {
                   }}
                   onMouseEnter={() => setHoveredEdgeId(pos.id)}
                   onMouseLeave={() => setHoveredEdgeId(null)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setEditEdgeId(pos.id)
+                  }}
                   onDoubleClick={(e) => {
                     e.stopPropagation()
                     setEditEdgeId(pos.id)
@@ -1435,6 +1513,7 @@ export default function Canvas() {
             return !r?.collapsed
           }).map(node => {
             const density = store.canvasDensity
+            const isFlow = isFlowNodeType(node.type)
             const keyFields = (node.fields ?? []).filter(f => f.keyRole || f.ref || f.required)
             const displayedFields = density === 'standard' ? (keyFields.length > 0 ? keyFields : (node.fields ?? []).slice(0, 4)) : (node.fields ?? [])
             const pkCount = (node.fields ?? []).filter(f => f.keyRole === 'primary').length
@@ -1474,13 +1553,22 @@ export default function Canvas() {
                     store.selectNode(node.id)
                   }
                 }}
-                className={`node-el absolute z-20 cursor-move bg-white border transition-colors transition-shadow duration-200 rounded-xl ${density === 'compact' ? 'p-2.5 min-w-44' : `p-3.5 ${store.showThreeColumns ? 'min-w-[280px]' : 'min-w-56'}`} flex flex-col group/node hover:ring-2 hover:ring-indigo-400 hover:shadow-lg hover:-translate-y-0.5 ${
-                  !isNodeActive ? 'opacity-15 grayscale border-zinc-200 shadow-none' : (
-                    activeRequirement ? 'ring-2 ring-purple-500 shadow-md shadow-purple-100/50 border-purple-200 z-30' :
-                    activeFlow ? 'ring-2 ring-indigo-500 shadow-md shadow-indigo-100/50 border-indigo-200 z-30' : 'border-zinc-200 shadow-sm'
+                className={`node-el absolute z-20 cursor-move transition-colors transition-shadow duration-200 ${
+                  isFlow
+                    ? `flow-node ${flowShapeClass(node.type)} flex items-center justify-center hover:drop-shadow-[0_2px_8px_rgba(0,0,0,0.18)]`
+                    : `canvas-node-card bg-white/96 border ${density === 'compact' ? 'p-2.5 min-w-44' : `p-3.5 ${store.showThreeColumns ? 'min-w-[280px]' : 'min-w-56'}`} flex flex-col group/node hover:ring-0`
+                } ${
+                  !isNodeActive ? 'opacity-15 grayscale shadow-none' : (
+                    isFlow ? (
+                      activeRequirement ? 'drop-shadow-[0_0_8px_rgba(168,85,247,0.55)] z-30' :
+                      activeFlow ? 'drop-shadow-[0_0_8px_rgba(99,102,241,0.55)] z-30' : ''
+                    ) : (
+                      activeRequirement ? 'ring-2 ring-purple-500 shadow-md shadow-purple-100/50 border-purple-200 z-30' :
+                      activeFlow ? 'ring-2 ring-indigo-500 shadow-md shadow-indigo-100/50 border-indigo-200 z-30' : 'border-zinc-200 shadow-sm'
+                    )
                   )
                 } ${
-                  (store.editingBusinessFlowId || linkingRequirementId) ? 'ring-2 border-zinc-300' : ''
+                  (store.editingBusinessFlowId || linkingRequirementId) ? (isFlow ? 'drop-shadow-[0_0_8px_rgba(161,161,170,0.5)]' : 'ring-2 border-zinc-300') : ''
                 } ${
                   isNodeInEditMode && linkingRequirementId ? 'ring-purple-500 border-purple-500 bg-purple-50/10' :
                   isNodeInEditMode ? 'ring-indigo-500 border-indigo-500 bg-indigo-50/10' : ''
@@ -1490,12 +1578,17 @@ export default function Canvas() {
                 data-node-id={node.id}
                 style={{ left: nx, top: ny }}
               >
-              {/* Header & Fields */}
-              {(() => {
+              {/* Header & Fields (ER nodes) / centered label (flowchart shapes) */}
+              {isFlow ? (
+                <div className="flow-label select-none">
+                  <span className="text-xs font-bold tracking-tight leading-snug">{node.label}</span>
+                </div>
+              ) : (
+              (() => {
                 const nodeContainsHoveredField = hoveredFieldInfo && node.fields?.some(f => highlightedFieldSet.has(`${node.id}.${f.name}`))
                 return (
                   <>
-                    <div className={`flex items-center justify-between ${density === 'compact' ? 'pb-0 border-b-0 mb-0' : 'pb-2 border-b border-zinc-200/80 mb-1'} ${
+                    <div className={`flex items-center justify-between ${density === 'compact' ? 'pb-0 border-b-0 mb-0' : 'pb-2 border-b border-slate-200/80 mb-1'} ${
                       node.collapsedFields && nodeContainsHoveredField ? 'bg-blue-50 rounded-md px-2 -mx-2 ring-1 ring-blue-200 transition-all duration-300' : 'transition-all duration-300'
                     }`}>
                       <div 
@@ -1530,7 +1623,7 @@ export default function Canvas() {
                              onDoubleClick={e => e.stopPropagation()}
                            />
                         ) : (
-                          <span className="text-xs font-bold text-zinc-900 tracking-tight">{node.label}</span>
+                           <span className="text-xs font-bold text-slate-950 tracking-tight">{node.label}</span>
                         )}
                       </div>
                       <div className="flex items-center gap-1">
@@ -1542,12 +1635,12 @@ export default function Canvas() {
                           <Focus size={13} />
                         </button>
                         {node.sublabel && density !== 'compact' && (
-                          <span className="text-[9px] bg-zinc-100 text-zinc-500 font-semibold px-1.5 py-0.5 rounded border border-zinc-200/30">
+                          <span className="text-[9px] bg-slate-100 text-slate-500 font-semibold px-1.5 py-0.5 rounded border border-slate-200/60">
                             {node.sublabel}
                           </span>
                         )}
                         {density === 'compact' && (pkCount > 0 || fkCount > 0 || ukCount > 0) && (
-                          <span className="text-[9px] bg-zinc-100 text-zinc-500 font-semibold px-1.5 py-0.5 rounded border border-zinc-200/30">
+                          <span className="text-[9px] bg-slate-100 text-slate-500 font-semibold px-1.5 py-0.5 rounded border border-slate-200/60">
                             {pkCount > 0 && `PK${pkCount} `}
                             {fkCount > 0 && `FK${fkCount} `}
                             {ukCount > 0 && `UK${ukCount}`}
@@ -1573,7 +1666,7 @@ export default function Canvas() {
                     )}
 
                     {density !== 'compact' && !node.collapsedFields && node.fields && displayedFields.length > 0 && (
-                      <div className="flex flex-col rounded-md overflow-hidden border border-zinc-100">
+                      <div className="flex flex-col rounded-md overflow-hidden border border-slate-100">
                         {displayedFields.map((f, i) => {
                           const isHoverMatched = hoveredFieldInfo && highlightedFieldSet.has(`${node.id}.${f.name}`)
                           return (
@@ -1582,7 +1675,7 @@ export default function Canvas() {
                               onMouseEnter={() => setHoveredFieldInfo({ nodeId: node.id, name: f.name, ref: f.ref })}
                               onMouseLeave={() => setHoveredFieldInfo(null)}
                               className={`grid ${store.showThreeColumns ? 'grid-cols-[4fr_4fr_3fr]' : 'grid-cols-[1fr_auto]'} items-center text-[11px] gap-2 px-2 py-1.5 transition-colors cursor-default ${
-                                isHoverMatched ? 'bg-blue-100 text-blue-900 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.3)]' : (i % 2 === 0 ? 'bg-zinc-50/50' : 'bg-white')
+                                isHoverMatched ? 'bg-blue-100 text-blue-900 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.3)]' : (i % 2 === 0 ? 'bg-slate-50/70' : 'bg-white')
                               }`}
                               title={f.default ? `默认值: ${f.default}` : undefined}
                             >
@@ -1626,13 +1719,14 @@ export default function Canvas() {
                     )}
                   </>
                 )
-              })()}
+              })()
+              )}
 
-              {/* Port Connectors */}
-              <div className="port port-t absolute w-2 h-2 rounded-full bg-zinc-300 border border-white top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-crosshair z-30 hover:bg-zinc-900 hover:scale-125 transition-transform duration-100" />
-              <div className="port port-b absolute w-2 h-2 rounded-full bg-zinc-300 border border-white bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 cursor-crosshair z-30 hover:bg-zinc-900 hover:scale-125 transition-transform duration-100" />
-              <div className="port port-l absolute w-2 h-2 rounded-full bg-zinc-300 border border-white left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-crosshair z-30 hover:bg-zinc-900 hover:scale-125 transition-transform duration-100" />
-              <div className="port port-r absolute w-2 h-2 rounded-full bg-zinc-300 border border-white right-0 top-1/2 translate-x-1/2 -translate-y-1/2 cursor-crosshair z-30 hover:bg-zinc-900 hover:scale-125 transition-transform duration-100" />
+              {/* Port Connectors — 连线中(connecting)时所有端口高亮;锚点编号:0上 1右 2下 3左 */}
+              <div title="上锚点 (0)" className={`port canvas-port port-t absolute w-2 h-2 rounded-full top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-crosshair z-30 transition-all duration-100 ${connecting ? 'bg-indigo-500 ring-2 ring-indigo-200 scale-125 opacity-100' : 'bg-slate-300 opacity-0 group-hover/node:opacity-100 hover:bg-slate-900 hover:scale-125'}`} />
+              <div title="右锚点 (1)" className={`port canvas-port port-r absolute w-2 h-2 rounded-full right-0 top-1/2 translate-x-1/2 -translate-y-1/2 cursor-crosshair z-30 transition-all duration-100 ${connecting ? 'bg-indigo-500 ring-2 ring-indigo-200 scale-125 opacity-100' : 'bg-slate-300 opacity-0 group-hover/node:opacity-100 hover:bg-slate-900 hover:scale-125'}`} />
+              <div title="下锚点 (2)" className={`port canvas-port port-b absolute w-2 h-2 rounded-full bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 cursor-crosshair z-30 transition-all duration-100 ${connecting ? 'bg-indigo-500 ring-2 ring-indigo-200 scale-125 opacity-100' : 'bg-slate-300 opacity-0 group-hover/node:opacity-100 hover:bg-slate-900 hover:scale-125'}`} />
+              <div title="左锚点 (3)" className={`port canvas-port port-l absolute w-2 h-2 rounded-full left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-crosshair z-30 transition-all duration-100 ${connecting ? 'bg-indigo-500 ring-2 ring-indigo-200 scale-125 opacity-100' : 'bg-slate-300 opacity-0 group-hover/node:opacity-100 hover:bg-slate-900 hover:scale-125'}`} />
             </div>
           )})}
 
@@ -1681,8 +1775,32 @@ export default function Canvas() {
           onClose={() => setEditEdgeId(null)}
         />
       )}
+      {selectedNode && !drag.current && (
+        <div className="fixed bottom-8 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-1 rounded-lg border border-slate-200 bg-white/92 p-1.5 shadow-xl backdrop-blur">
+          <div className="max-w-48 truncate px-2 text-[11px] font-bold text-slate-700" title={selectedNode.label}>
+            {selectedNode.label}
+          </div>
+          <div className="mx-1 h-4 w-px bg-slate-200" />
+          <button
+            className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
+            title="聚焦到此节点"
+            onClick={() => store.focusNode(selectedNode.id)}
+          >
+            <Focus size={14} />
+            聚焦
+          </button>
+          <button
+            className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
+            title="编辑字段与键"
+            onClick={() => setEditNodeId(selectedNode.id)}
+          >
+            <Table size={14} />
+            编辑
+          </button>
+        </div>
+      )}
       {selectedNodeIds.length > 1 && !drag.current && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-white border border-zinc-200 shadow-xl rounded-xl p-1.5 flex items-center gap-1">
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-white/92 backdrop-blur border border-slate-200 shadow-xl rounded-lg p-1.5 flex items-center gap-1">
           <div className="text-[10px] font-bold text-zinc-400 px-2 uppercase tracking-wider">对齐</div>
           <div className="w-px h-4 bg-zinc-200 mx-1" />
           <button className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-600 transition-colors" title="左对齐" onClick={() => store.alignNodes(selectedNodeIds, 'left')}><AlignLeft size={16} /></button>
@@ -1700,6 +1818,11 @@ export default function Canvas() {
             </>
           )}
         </div>
+      )}
+      {showCreateNodeEditor && (
+        <EntityEditor
+          onClose={() => setShowCreateNodeEditor(false)}
+        />
       )}
       <MiniMap />
     </>

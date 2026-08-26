@@ -38,6 +38,27 @@ function now(): number {
   return Date.now();
 }
 
+// Flowchart node types (aligned with web/src/types/index.ts FLOW_NODE_TYPES).
+const FLOW_NODE_TYPES = new Set(['flowStart', 'flowEnd', 'flowProcess', 'flowDecision', 'flowIo', 'flowDocument', 'flowDatabase']);
+
+function isFlowNodeType(type: string): boolean {
+  return FLOW_NODE_TYPES.has(type);
+}
+
+/** Layout size estimate for a flowchart node — mirrors the CSS shapes in web/src/index.css. */
+function flowNodeLayoutSize(n: FlowNode): { width: number; height: number } {
+  switch (n.type) {
+    case 'flowDecision': return { width: 200, height: 110 }; // diamond: clip-path padding 32px top/bottom
+    case 'flowIo': return { width: 200, height: 56 };
+    case 'flowDatabase': return { width: 180, height: 64 };
+    case 'flowDocument': return { width: 180, height: 60 };
+    case 'flowStart':
+    case 'flowEnd':
+    case 'flowProcess': return { width: 180, height: 56 };
+    default: return { width: 180, height: 56 };
+  }
+}
+
 export class Store {
   private dataDir: string;
   private filePath: string;
@@ -277,6 +298,8 @@ export class Store {
 
       if (updates.label !== undefined) edge.label = updates.label;
       if (updates.dir !== undefined) edge.dir = updates.dir;
+      if (updates.sourcePort !== undefined) edge.sourcePort = updates.sourcePort;
+      if (updates.targetPort !== undefined) edge.targetPort = updates.targetPort;
       
       p.updatedAt = now();
       return { result: edge, mutate: true };
@@ -763,8 +786,13 @@ export class Store {
       const p = projects.find(p => p.id === projectId);
       if (!p) return { result: false, mutate: false };
 
+      // Flowchart-heavy projects read top-to-bottom; ER diagrams read left-to-right.
+      const flowRatio = p.nodes.length === 0 ? 0 : p.nodes.filter(n => isFlowNodeType(n.type)).length / p.nodes.length;
+      const isFlowProject = flowRatio >= 0.5;
+      const rankdir = isFlowProject ? 'TB' : 'LR';
+
       const g = new dagre.graphlib.Graph({ compound: true });
-      g.setGraph({ rankdir: 'LR', align: 'UL', nodesep: 80, ranksep: 150, edgesep: 40 });
+      g.setGraph({ rankdir, align: 'UL', nodesep: isFlowProject ? 60 : 80, ranksep: isFlowProject ? 130 : 150, edgesep: 40 });
       g.setDefaultEdgeLabel(() => ({}));
 
       p.regions.forEach(r => {
@@ -772,9 +800,14 @@ export class Store {
       });
 
       p.nodes.forEach(n => {
-        const fieldCount = n.fields ? n.fields.length : 0;
-        const actualHeight = 60 + fieldCount * 22;
-        g.setNode(n.id, { width: 180 + 40, height: actualHeight + 40 });
+        if (isFlowNodeType(n.type)) {
+          const size = flowNodeLayoutSize(n);
+          g.setNode(n.id, { width: size.width, height: size.height });
+        } else {
+          const fieldCount = n.fields ? n.fields.length : 0;
+          const actualHeight = 60 + fieldCount * 22;
+          g.setNode(n.id, { width: 180 + 40, height: actualHeight + 40 });
+        }
         if (n.regionId) {
           g.setParent(n.id, n.regionId);
         }
@@ -789,10 +822,16 @@ export class Store {
       p.nodes.forEach(n => {
         const dn = g.node(n.id);
         if (dn) {
-          const fieldCount = n.fields ? n.fields.length : 0;
-          const actualHeight = 60 + fieldCount * 22;
-          n.x = dn.x - 90;
-          n.y = dn.y - actualHeight / 2;
+          if (isFlowNodeType(n.type)) {
+            const size = flowNodeLayoutSize(n);
+            n.x = dn.x - size.width / 2;
+            n.y = dn.y - size.height / 2;
+          } else {
+            const fieldCount = n.fields ? n.fields.length : 0;
+            const actualHeight = 60 + fieldCount * 22;
+            n.x = dn.x - 90;
+            n.y = dn.y - actualHeight / 2;
+          }
         }
       });
 

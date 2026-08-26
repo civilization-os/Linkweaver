@@ -178,13 +178,13 @@ export default function MiniMap() {
 
   return (
     <div 
-      className="absolute bottom-4 left-4 z-50 bg-white/90 backdrop-blur border border-zinc-200 shadow-xl rounded-lg overflow-hidden group"
+      className="canvas-minimap absolute bottom-4 left-4 z-50 backdrop-blur border border-slate-200/80 overflow-hidden group"
       style={{ width: mapW, height: mapH }}
     >
-      <div className="text-[10px] font-bold tracking-widest uppercase text-zinc-400 absolute top-1.5 left-2 pointer-events-none z-10 opacity-50 group-hover:opacity-100 transition-opacity">Map</div>
+      <div className="text-[10px] font-bold uppercase text-slate-400 absolute top-1.5 left-2 pointer-events-none z-10 opacity-50 group-hover:opacity-100 transition-opacity">Map</div>
       <div className="absolute right-1.5 top-1.5 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
-          className="flex h-5 w-5 items-center justify-center rounded border border-zinc-200 bg-white/90 text-zinc-500 hover:text-zinc-900"
+          className="flex h-5 w-5 items-center justify-center rounded border border-slate-200 bg-white/90 text-slate-500 hover:text-slate-900"
           title="适配全部"
           onMouseDown={e => e.stopPropagation()}
           onClick={() => focusBounds()}
@@ -192,7 +192,7 @@ export default function MiniMap() {
           <Maximize2 size={11} />
         </button>
         <button
-          className="flex h-5 w-5 items-center justify-center rounded border border-zinc-200 bg-white/90 text-zinc-500 hover:text-indigo-700 disabled:opacity-40"
+          className="flex h-5 w-5 items-center justify-center rounded border border-slate-200 bg-white/90 text-slate-500 hover:text-indigo-700 disabled:opacity-40"
           title="定位当前业务流程"
           disabled={!activeFlow}
           onMouseDown={e => e.stopPropagation()}
@@ -204,7 +204,7 @@ export default function MiniMap() {
       
       <div 
         ref={containerRef}
-        className="w-full h-full relative cursor-crosshair"
+        className="w-full h-full relative cursor-crosshair bg-[radial-gradient(circle_at_1px_1px,rgba(148,163,184,0.22)_1px,transparent_0)] bg-[length:12px_12px]"
         onMouseDown={handleMouseDown}
       >
         {/* Regions */}
@@ -213,7 +213,7 @@ export default function MiniMap() {
           return (
             <div
               key={`r-${r.id}`}
-              className="absolute border border-zinc-300 opacity-30 rounded-sm"
+              className="absolute border border-slate-400/40 opacity-35 rounded-sm"
               style={{
                 left: pos.x,
                 top: pos.y,
@@ -240,7 +240,7 @@ export default function MiniMap() {
           return (
             <div
               key={`n-${n.id}`}
-              className="absolute rounded-sm shadow-sm opacity-80"
+              className="absolute rounded-sm opacity-85"
               style={{
                 left: pos.x,
                 top: pos.y,

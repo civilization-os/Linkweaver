@@ -6,12 +6,12 @@ import { Store } from './store.js';
 import { createApiRouter } from './api.js';
 import { setupMcp } from './mcp.js';
 import express from 'express';
-import cors from 'cors';
 import { randomUUID } from 'crypto';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { getLocalOriginMiddleware } from './origin.js';
 import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,18 +38,6 @@ function createLinkweaverMcpServer(store: Store) {
 
 function getStringHeader(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function isAllowedLocalOrigin(origin: string | undefined, port: number) {
-  if (!origin) return true;
-
-  try {
-    const url = new URL(origin);
-    const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
-    return allowedHosts.has(url.hostname) && (!url.port || url.port === String(port) || url.port === '5173');
-  } catch {
-    return false;
-  }
 }
 
 async function closeActiveMcpTransports() {
@@ -109,11 +97,7 @@ if (!gotTheLock) {
 
     let settings = getSettings();
 
-    expressApp.use(cors({
-      origin: (origin, callback) => {
-        callback(isAllowedLocalOrigin(origin, settings.mcpPort) ? null : new Error('Origin not allowed'), true);
-      },
-    }));
+    expressApp.use(getLocalOriginMiddleware(settings.mcpPort));
     expressApp.use(express.json({ limit: '10mb' }));
 
     // Enable verbose MCP request logging only when explicitly debugging locally.

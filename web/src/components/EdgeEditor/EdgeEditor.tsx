@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../store/useStore'
-import type { DataFlow } from '../../types'
+import type { DataFlow, PortSide } from '../../types'
 import { X, ArrowRight } from 'lucide-react'
 
 interface Props {
@@ -25,6 +25,8 @@ export default function EdgeEditor({ sourceId, targetId, edgeId, onClose }: Prop
 
   const [label, setLabel] = useState(existingEdge?.label ?? '')
   const [dir, setDir] = useState<'fwd' | 'rev' | 'both'>(existingEdge?.dir ?? 'fwd')
+  const [sourcePort, setSourcePort] = useState<PortSide>(existingEdge?.sourcePort ?? 'r')
+  const [targetPort, setTargetPort] = useState<PortSide>(existingEdge?.targetPort ?? 'l')
   const [mappings, setMappings] = useState<string>(existingEdge?.dataMappings ?? '')
 
   const handleSave = () => {
@@ -33,15 +35,17 @@ export default function EdgeEditor({ sourceId, targetId, edgeId, onClose }: Prop
       updateEdge(existingEdge.id, {
         label: finalLabel,
         dataMappings: mappings.trim() || undefined,
-        dir
+        dir,
+        sourcePort,
+        targetPort,
       })
     } else {
       const edge: DataFlow = {
         id: 'e' + Math.random().toString(36).slice(2, 6),
         sourceId: sId!,
-        sourcePort: 'r',
+        sourcePort,
         targetId: tId!,
-        targetPort: 'l',
+        targetPort,
         label: finalLabel,
         dataMappings: mappings.trim() || undefined,
         dir,
@@ -111,6 +115,36 @@ export default function EdgeEditor({ sourceId, targetId, edgeId, onClose }: Prop
                   {d === 'fwd' ? '→ 正向' : d === 'rev' ? '← 反向' : '↔ 双向'}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* 锚点选择 — 编号与 MCP create_flow 的 source_port/target_port 一致:0上 1右 2下 3左 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-zinc-400">源锚点</label>
+              <select
+                className="px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-lg outline-none focus:bg-white focus:border-zinc-900 transition-all"
+                value={sourcePort}
+                onChange={e => setSourcePort(e.target.value as PortSide)}
+              >
+                <option value="t">上 (0)</option>
+                <option value="r">右 (1)</option>
+                <option value="b">下 (2)</option>
+                <option value="l">左 (3)</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-zinc-400">目标锚点</label>
+              <select
+                className="px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-lg outline-none focus:bg-white focus:border-zinc-900 transition-all"
+                value={targetPort}
+                onChange={e => setTargetPort(e.target.value as PortSide)}
+              >
+                <option value="t">上 (0)</option>
+                <option value="r">右 (1)</option>
+                <option value="b">下 (2)</option>
+                <option value="l">左 (3)</option>
+              </select>
             </div>
           </div>
 

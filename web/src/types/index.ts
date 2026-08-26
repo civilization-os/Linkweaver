@@ -36,6 +36,8 @@ export type PortSide = 't' | 'b' | 'l' | 'r'
 export interface FlowNode {
   id: string
   type: 'entity' | 'actor' | 'process' | 'nested'
+    | 'flowStart' | 'flowEnd' | 'flowProcess' | 'flowDecision'
+    | 'flowIo' | 'flowDocument' | 'flowDatabase'
   label: string
   sublabel?: string
   fields?: Field[]
@@ -43,6 +45,23 @@ export interface FlowNode {
   y: number
   regionId?: string
   collapsedFields?: boolean
+}
+
+/** Flowchart (流程图) node types — rendered as distinct shapes on the canvas. */
+export const FLOW_NODE_TYPES = [
+  'flowStart',
+  'flowEnd',
+  'flowProcess',
+  'flowDecision',
+  'flowIo',
+  'flowDocument',
+  'flowDatabase',
+] as const
+
+export type FlowNodeType = FlowNode['type']
+
+export function isFlowNodeType(type: string): boolean {
+  return (FLOW_NODE_TYPES as readonly string[]).includes(type)
 }
 
 export interface Region {

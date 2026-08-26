@@ -11,6 +11,64 @@ html, body, #root {
   background-color: transparent; /* Allows Mica to show through */
 }
 
+.canvas-surface {
+  background-color: #f8fafc;
+  background-image:
+    radial-gradient(circle at 16px 16px, rgba(15, 23, 42, 0.055) 1px, transparent 1.2px),
+    linear-gradient(to right, rgba(148, 163, 184, 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.16) 1px, transparent 1px);
+}
+
+.canvas-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.18) 42%, rgba(241, 245, 249, 0.62)),
+    radial-gradient(circle at 18% 12%, rgba(14, 165, 233, 0.08), transparent 28%),
+    radial-gradient(circle at 84% 82%, rgba(16, 185, 129, 0.07), transparent 32%);
+}
+
+.canvas-node-card {
+  border-radius: 8px;
+  border-color: rgba(203, 213, 225, 0.9);
+  box-shadow:
+    0 1px 1px rgba(15, 23, 42, 0.04),
+    0 8px 24px -18px rgba(15, 23, 42, 0.45);
+}
+
+.canvas-node-card:hover {
+  border-color: rgba(99, 102, 241, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.18),
+    0 16px 36px -24px rgba(15, 23, 42, 0.55);
+}
+
+.canvas-region {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.52);
+}
+
+.canvas-edge-label {
+  backdrop-filter: blur(10px);
+  box-shadow:
+    0 1px 1px rgba(15, 23, 42, 0.04),
+    0 8px 18px -16px rgba(15, 23, 42, 0.55);
+}
+
+.canvas-port {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.92);
+}
+
+.canvas-minimap {
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.88));
+  box-shadow:
+    0 1px 1px rgba(15, 23, 42, 0.04),
+    0 18px 42px -28px rgba(15, 23, 42, 0.65);
+}
+
 /* Electron Window Drag */
 .drag-region {
   -webkit-app-region: drag;
@@ -20,6 +78,45 @@ html, body, #root {
 }
 .no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* Flowchart node shapes (web/src/types/index.ts FLOW_NODE_TYPES) */
+.flow-node {
+  min-width: 130px;
+  min-height: 52px;
+}
+.flow-node .flow-label {
+  text-align: center;
+  line-height: 1.3;
+  word-break: break-word;
+}
+.flow-capsule {
+  border-radius: 9999px;
+  border: 2px solid;
+  padding: 10px 26px;
+}
+.flow-process {
+  border-radius: 10px;
+  border: 2px solid;
+  padding: 12px 20px;
+}
+.flow-decision {
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  padding: 32px 48px;
+}
+.flow-io {
+  clip-path: polygon(12% 0%, 100% 0%, 88% 100%, 0% 100%);
+  padding: 12px 28px;
+}
+.flow-document {
+  border: 2px solid;
+  border-radius: 4px 20px 4px 4px;
+  padding: 12px 20px;
+}
+.flow-database {
+  border: 2px solid;
+  border-radius: 50% 50% 10px 10px / 28% 28% 10px 10px;
+  padding: 18px 26px 12px;
 }
 
 /* Custom Grid background lines */

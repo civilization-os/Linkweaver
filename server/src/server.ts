@@ -12,6 +12,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { getLocalOriginMiddleware } from './origin.js';
 
 dotenv.config();
 
@@ -29,33 +30,6 @@ function createLinkweaverMcpServer(store: Store) {
 
 function getStringHeader(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function getLocalOriginMiddleware(port: string | number) {
-  const allowedPort = String(port);
-
-  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const origin = req.headers.origin;
-    if (!origin) {
-      next();
-      return;
-    }
-
-    try {
-      const url = new URL(origin);
-      const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
-      if (allowedHosts.has(url.hostname) && (!url.port || url.port === allowedPort || url.port === '5173')) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Vary', 'Origin');
-        next();
-        return;
-      }
-    } catch {
-      // Fall through to rejection.
-    }
-
-    res.status(403).send('Origin not allowed');
-  };
 }
 
 async function main() {

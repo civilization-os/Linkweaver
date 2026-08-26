@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { FlowNode, Field } from '../../types'
+import { isFlowNodeType } from '../../types'
 import { useStore } from '../../store/useStore'
 import { X, Plus, Trash2, GripVertical, KeyRound, Link2, BadgeCheck } from 'lucide-react'
 import {
@@ -150,11 +151,14 @@ export default function EntityEditor({ onClose, editNode }: Props) {
   const updateNode = useStore(s => s.updateNode)
 
   const [name, setName] = useState(editNode?.label ?? '')
-  const [type, setType] = useState<'entity' | 'actor' | 'process' | 'nested'>(editNode?.type ?? 'entity')
+  const [type, setType] = useState<string>(editNode?.type ?? 'entity')
   const [sublabel] = useState(editNode?.sublabel ?? '实体')
   const [fields, setFields] = useState<EditField[]>(
     (editNode?.fields ?? []).map(f => ({ ...f, _id: Math.random().toString(36).slice(2) }))
   )
+
+  // Flowchart nodes have no field table — hide the field config section.
+  const isFlowType = isFlowNodeType(type)
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -188,7 +192,11 @@ export default function EntityEditor({ onClose, editNode }: Props) {
 
   const handleSave = () => {
     if (!name.trim()) return
-    const labelMap: Record<string, string> = { entity: '实体', actor: '外部', process: '流程', nested: '嵌套' }
+    const labelMap: Record<string, string> = {
+      entity: '实体', actor: '外部', process: '流程', nested: '嵌套',
+      flowStart: '开始', flowEnd: '结束', flowProcess: '处理', flowDecision: '判断',
+      flowIo: '输入输出', flowDocument: '文档', flowDatabase: '数据存储',
+    }
     
     const finalFields = fields.map(({ _id, ...rest }) => rest).filter(f => f.name.trim())
 
@@ -241,7 +249,7 @@ export default function EntityEditor({ onClose, editNode }: Props) {
               className="flex-1 px-3.5 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-lg outline-none focus:bg-white focus:border-zinc-900 transition-all placeholder-zinc-400"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="实体名称"
+              placeholder={isFlowType ? '节点名称' : '实体名称'}
               autoFocus
             />
           </div>
@@ -252,10 +260,21 @@ export default function EntityEditor({ onClose, editNode }: Props) {
               value={type}
               onChange={e => setType(e.target.value as any)}
             >
-              <option value="entity">实体</option>
-              <option value="actor">外部</option>
-              <option value="process">流程</option>
-              <option value="nested">嵌套</option>
+              <optgroup label="数据建模">
+                <option value="entity">实体</option>
+                <option value="actor">外部</option>
+                <option value="process">流程</option>
+                <option value="nested">嵌套</option>
+              </optgroup>
+              <optgroup label="流程图">
+                <option value="flowStart">开始/终止</option>
+                <option value="flowEnd">结束</option>
+                <option value="flowProcess">处理</option>
+                <option value="flowDecision">判断</option>
+                <option value="flowIo">输入/输出</option>
+                <option value="flowDocument">文档</option>
+                <option value="flowDatabase">数据存储</option>
+              </optgroup>
             </select>
           </div>
 
@@ -264,7 +283,12 @@ export default function EntityEditor({ onClose, editNode }: Props) {
               <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">字段配置</div>
               <span className="text-[10px] text-zinc-400">键属性完全由你确认，不做 AI 推测</span>
             </div>
-            
+            {isFlowType ? (
+              <p className="text-[11px] text-zinc-400 bg-zinc-50 rounded-lg px-3 py-2.5">
+                流程图形状节点不包含字段表，保存后将以对应形状显示在画布上。
+              </p>
+            ) : (
+            <>
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               <DndContext 
                 sensors={sensors}
@@ -295,6 +319,8 @@ export default function EntityEditor({ onClose, editNode }: Props) {
               <Plus size={14} />
               <span>添加字段</span>
             </button>
+            </>
+            )}
           </div>
         </div>
 

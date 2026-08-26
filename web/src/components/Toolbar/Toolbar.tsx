@@ -20,7 +20,6 @@ import {
   Grid,
   Image,
   Film,
-  Download,
   Sparkles,
   Search,
   Expand,
@@ -56,6 +55,8 @@ export default function Toolbar() {
   const syncCurrentProject = useStore(s => s.syncCurrentProject)
   const focusMode = useStore(s => s.focusMode)
   const setFocusMode = useStore(s => s.setFocusMode)
+  const searchQuery = useStore(s => s.searchQuery)
+  const setSearchQuery = useStore(s => s.setSearchQuery)
 
   const [isExportingGIF, setIsExportingGIF] = useState(false)
   const [gifProgress, setGifProgress] = useState(0)
@@ -478,8 +479,8 @@ export default function Toolbar() {
             type="text" 
             placeholder="搜索节点或连线..." 
             className="pl-8 pr-3 py-1.5 bg-zinc-50 border border-zinc-200/60 rounded-lg text-xs font-semibold text-zinc-700 w-48 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:bg-white transition-all"
-            value={useStore(s => s.searchQuery)}
-            onChange={(e) => useStore.getState().setSearchQuery(e.target.value)}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
 

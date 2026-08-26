@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../../store/useStore'
 import type { FlowNode } from '../../types'
 import EntityEditor from '../EntityEditor/EntityEditor'
-import { Plus, X, Box, Layers, GitMerge, Edit3, Check, Trash2, KeyRound, Link2, BadgeCheck, Crosshair } from 'lucide-react'
+import { Plus, X, Box, Layers, GitMerge, Edit3, Check, Trash2, KeyRound, Link2, BadgeCheck, Crosshair, Database, Network } from 'lucide-react'
 
 export default function CanvasSidePanel() {
   const project = useStore(s => s.currentProject())
@@ -28,6 +28,7 @@ export default function CanvasSidePanel() {
   const unplacedNodes = project.nodes.filter(n => !n.regionId)
   const regions = project.regions
   const flows = project.businessFlows ?? []
+  const edgeCount = project.edges.length
   const selectedNode = selectedNodeIds.length === 1
     ? project.nodes.find(n => n.id === selectedNodeIds[0])
     : undefined
@@ -86,23 +87,55 @@ export default function CanvasSidePanel() {
 
   return (
     <>
-      <div className="w-64 bg-white border-l border-zinc-200 p-5 flex flex-col gap-6 overflow-y-auto shrink-0 select-none h-full">
+      <div className="w-72 shrink-0 select-none overflow-y-auto border-l border-slate-200/80 bg-slate-50/95 p-4 shadow-[-1px_0_0_rgba(15,23,42,0.02)] h-full">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-bold text-zinc-900 tracking-tight">工具箱</span>
-          <button
-            className="flex items-center gap-1 text-xs font-semibold text-zinc-600 hover:text-zinc-900 transition-colors cursor-pointer"
-            onClick={() => {
-              setEditorNode(undefined)
-              setShowEditor(true)
-            }}
-          >
-            <Plus size={14} />
-            <span>实体</span>
-          </button>
+        <div className="sticky top-0 z-10 -mx-4 -mt-4 border-b border-slate-200/80 bg-slate-50/95 px-4 py-4 backdrop-blur">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-bold tracking-tight text-slate-950">结构检查器</div>
+              <div className="mt-0.5 text-[11px] text-slate-500">
+                {selectedNode ? '当前实体' : selectedNodeIds.length > 1 ? `${selectedNodeIds.length} 个实体已选择` : '项目结构'}
+              </div>
+            </div>
+            <button
+              className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 cursor-pointer"
+              onClick={() => {
+                setEditorNode(undefined)
+                setShowEditor(true)
+              }}
+            >
+              <Plus size={14} />
+              <span>实体</span>
+            </button>
+          </div>
+
+          <div className="mt-3 grid grid-cols-3 gap-1.5">
+            <div className="rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+                <Database size={11} />
+                <span>实体</span>
+              </div>
+              <div className="text-sm font-bold text-slate-900">{project.nodes.length}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+                <Network size={11} />
+                <span>连线</span>
+              </div>
+              <div className="text-sm font-bold text-slate-900">{edgeCount}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+                <Layers size={11} />
+                <span>区域</span>
+              </div>
+              <div className="text-sm font-bold text-slate-900">{regions.length}</div>
+            </div>
+          </div>
         </div>
 
-        {selectedNode && (
+        <div className="mt-4 flex flex-col gap-5">
+          {selectedNode && (
           <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -208,7 +241,7 @@ export default function CanvasSidePanel() {
               <span>编辑字段与键</span>
             </button>
           </div>
-        )}
+          )}
 
         {/* Unplaced entities */}
         <div className="flex flex-col gap-2.5">
@@ -411,6 +444,7 @@ export default function CanvasSidePanel() {
               </div>
             )}
           </div>
+        </div>
         </div>
       </div>
 

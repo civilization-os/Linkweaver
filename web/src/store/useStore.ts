@@ -1,11 +1,33 @@
 import { create } from 'zustand'
 import dagre from 'dagre'
 import type { FlowNode, DataFlow, Region, Project, ViewportState, BusinessFlow } from '../types'
+import { isFlowNodeType } from '../types'
 import { api } from '../api'
 
 function now() { return Date.now() }
 
 function uid(prefix: string) { return prefix + Math.random().toString(36).slice(2, 8) }
+
+/** Layout size estimate for a flowchart node — mirrors the CSS shapes in web/src/index.css. */
+function flowNodeLayoutSize(n: FlowNode): { width: number; height: number } {
+  switch (n.type) {
+    case 'flowDecision': return { width: 200, height: 110 } // diamond: clip-path padding 32px top/bottom
+    case 'flowIo': return { width: 200, height: 56 }
+    case 'flowDatabase': return { width: 180, height: 64 }
+    case 'flowDocument': return { width: 180, height: 60 }
+    case 'flowStart':
+    case 'flowEnd':
+    case 'flowProcess': return { width: 180, height: 56 }
+    default: return { width: 180, height: 56 }
+  }
+}
+
+function nodeLayoutSize(n: FlowNode, showThreeColumns: boolean): { width: number; height: number } {
+  if (isFlowNodeType(n.type)) return flowNodeLayoutSize(n)
+  const fieldCount = n.fields ? n.fields.length : 0
+  const nodeWidth = showThreeColumns ? 300 : 220
+  return { width: nodeWidth + 40, height: 60 + fieldCount * 22 + 40 }
+}
 
 interface AppState {
   projects: Project[]
@@ -583,8 +605,13 @@ export const useStore = create<AppState>((set, get) => ({
       })
     } else {
       // Default formatting
+      // Flowchart-heavy projects read top-to-bottom; ER diagrams read left-to-right.
+      const flowRatio = nodes.length === 0 ? 0 : nodes.filter(n => isFlowNodeType(n.type)).length / nodes.length
+      const isFlowProject = flowRatio >= 0.5
+      const rankdir = isFlowProject ? 'TB' : 'LR'
+
       const g = new dagre.graphlib.Graph({ compound: true })
-      g.setGraph({ rankdir: 'LR', align: 'UL', nodesep: 80, ranksep: 150, edgesep: 40 })
+      g.setGraph({ rankdir, align: 'UL', nodesep: isFlowProject ? 60 : 80, ranksep: isFlowProject ? 130 : 150, edgesep: 40 })
       g.setDefaultEdgeLabel(() => ({}))
 
       regions.forEach(r => {
@@ -592,10 +619,8 @@ export const useStore = create<AppState>((set, get) => ({
       })
 
       nodes.forEach(n => {
-        const fieldCount = n.fields ? n.fields.length : 0
-        const actualHeight = 60 + fieldCount * 22
-        const nodeWidth = get().showThreeColumns ? 300 : 220
-        g.setNode(n.id, { width: nodeWidth + 40, height: actualHeight + 40 }) 
+        const size = nodeLayoutSize(n, get().showThreeColumns)
+        g.setNode(n.id, { width: size.width, height: size.height })
         if (n.regionId) {
           g.setParent(n.id, n.regionId)
         }
@@ -610,11 +635,9 @@ export const useStore = create<AppState>((set, get) => ({
       nodes.forEach(n => {
         const dn = g.node(n.id)
         if (dn) {
-          const fieldCount = n.fields ? n.fields.length : 0
-          const actualHeight = 60 + fieldCount * 22
-          const nodeWidth = get().showThreeColumns ? 300 : 220
-          n.x = dn.x - (nodeWidth / 2)
-          n.y = dn.y - actualHeight / 2
+          const size = nodeLayoutSize(n, get().showThreeColumns)
+          n.x = dn.x - size.width / 2
+          n.y = dn.y - size.height / 2
         }
       })
 
@@ -628,14 +651,11 @@ export const useStore = create<AppState>((set, get) => ({
         
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
         regionNodes.forEach(n => {
-          const fieldCount = n.fields ? n.fields.length : 0
-          const actualHeight = 60 + fieldCount * 22
-          const nodeWidth = get().showThreeColumns ? 300 : 220
-          
+          const size = nodeLayoutSize(n, get().showThreeColumns)
           minX = Math.min(minX, n.x)
           minY = Math.min(minY, n.y)
-          maxX = Math.max(maxX, n.x + nodeWidth)
-          maxY = Math.max(maxY, n.y + actualHeight)
+          maxX = Math.max(maxX, n.x + size.width)
+          maxY = Math.max(maxY, n.y + size.height)
         })
         
         // Add robust padding around the enclosed nodes

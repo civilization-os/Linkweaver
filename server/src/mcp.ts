@@ -49,6 +49,22 @@ function parseJsonArrayArg<T>(value: unknown, argName: string): T[] {
   return parsed as T[];
 }
 
+// Node anchors: 0=top, 1=right, 2=bottom, 3=left (clockwise from top).
+// Also accepts the letter codes t/r/b/l used by the frontend model.
+const PORT_INDEX: Record<string, string> = { '0': 't', '1': 'r', '2': 'b', '3': 'l' };
+
+function normalizePort(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 3) {
+    return PORT_INDEX[String(value)];
+  }
+  if (typeof value === 'string') {
+    const v = value.trim();
+    if (PORT_INDEX[v]) return PORT_INDEX[v];
+    if (v === 't' || v === 'r' || v === 'b' || v === 'l') return v;
+  }
+  return undefined;
+}
+
 export function setupMcp(server: Server, store: Store) {
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
@@ -141,7 +157,7 @@ export function setupMcp(server: Server, store: Store) {
             properties: {
               project_id: { type: 'string' },
               name: { type: 'string' },
-              type: { type: 'string', description: 'entity|actor|process|nested' },
+              type: { type: 'string', description: 'entity|actor|process|nested|flowStart|flowEnd|flowProcess|flowDecision|flowIo|flowDocument|flowDatabase' },
               fields: { type: 'array', items: FIELD_SCHEMA, description: 'Fields array. Each key role and relationship reference must be explicitly supplied, not inferred.' },
               fields_json: { type: 'string', description: 'JSON string of fields using the same schema as fields.' },
               x: { type: 'number', description: 'X coordinate' },
@@ -160,7 +176,7 @@ export function setupMcp(server: Server, store: Store) {
               project_id: { type: 'string' },
               entity_id: { type: 'string' },
               name: { type: 'string' },
-              type: { type: 'string', description: 'entity|actor|process|nested' },
+              type: { type: 'string', description: 'entity|actor|process|nested|flowStart|flowEnd|flowProcess|flowDecision|flowIo|flowDocument|flowDatabase' },
               fields: { type: 'array', items: FIELD_SCHEMA, description: 'Fields array. Each key role and relationship reference must be explicitly supplied, not inferred.' },
               fields_json: { type: 'string', description: 'JSON string of fields using the same schema as fields.' },
               x: { type: 'number', description: 'X coordinate' },
@@ -240,7 +256,9 @@ export function setupMcp(server: Server, store: Store) {
               source_id: { type: 'string' },
               target_id: { type: 'string' },
               label: { type: 'string' },
-              dir: { type: 'string', description: 'fwd|rev|both' }
+              dir: { type: 'string', description: 'fwd|rev|both' },
+              source_port: { type: 'string', description: 'Source anchor: 0=top, 1=right, 2=bottom, 3=left (also accepts t/r/b/l). Default 1 (right).' },
+              target_port: { type: 'string', description: 'Target anchor: 0=top, 1=right, 2=bottom, 3=left (also accepts t/r/b/l). Default 3 (left).' }
             },
             required: ['project_id', 'source_id', 'target_id']
           }
@@ -285,14 +303,16 @@ export function setupMcp(server: Server, store: Store) {
         },
         {
           name: 'update_flow',
-          description: 'Update a data flow properties (label, dir)',
+          description: 'Update a data flow properties (label, dir, anchors)',
           inputSchema: {
             type: 'object',
             properties: {
               project_id: { type: 'string' },
               flow_id: { type: 'string' },
               label: { type: 'string' },
-              dir: { type: 'string' }
+              dir: { type: 'string' },
+              source_port: { type: 'string', description: 'Source anchor: 0=top, 1=right, 2=bottom, 3=left (also accepts t/r/b/l).' },
+              target_port: { type: 'string', description: 'Target anchor: 0=top, 1=right, 2=bottom, 3=left (also accepts t/r/b/l).' }
             },
             required: ['project_id', 'flow_id']
           }
@@ -577,7 +597,13 @@ export function setupMcp(server: Server, store: Store) {
           if (args.fields_json) {
             fields = parseJsonArrayArg<any>(args.fields_json, 'fields_json');
           }
-          const labelMap: Record<string, string> = { entity: 'Entity', actor: 'Actor', process: 'Process', nested: 'Nested' };
+          // 与前端 EntityEditor 的 labelMap 保持一致(web/src/components/EntityEditor/EntityEditor.tsx),
+          // 否则同一画布上 MCP 创建与 UI 创建的节点 sublabel 语言混用,且画布搜索按 sublabel 匹配会失效。
+          const labelMap: Record<string, string> = {
+            entity: '实体', actor: '外部', process: '流程', nested: '嵌套',
+            flowStart: '开始', flowEnd: '结束', flowProcess: '处理', flowDecision: '判断',
+            flowIo: '输入输出', flowDocument: '文档', flowDatabase: '数据存储',
+          };
           const type = (args.type as string) || 'entity';
           const node = await store.addNode(args.project_id as string, {
             type,
@@ -636,9 +662,12 @@ export function setupMcp(server: Server, store: Store) {
         case 'create_flow': {
           const sourceId = args.source_id as string;
           const targetId = args.target_id as string;
-          const label = (args.label as string) || `${sourceId.slice(0, 6)} -> ${targetId.slice(0, 6)}`;
+          // 默认 label 与前端 EdgeEditor 一致使用 Unicode 箭头(web/src/components/EdgeEditor/EdgeEditor.tsx)。
+          const label = (args.label as string) || `${sourceId.slice(0, 6)} → ${targetId.slice(0, 6)}`;
+          const sourcePort = normalizePort(args.source_port ?? args.sourcePort) ?? 'r';
+          const targetPort = normalizePort(args.target_port ?? args.targetPort) ?? 'l';
           const edge = await store.addEdge(args.project_id as string, {
-            sourceId, targetId, sourcePort: 'r', targetPort: 'l', label, dir: (args.dir as string) || 'fwd'
+            sourceId, targetId, sourcePort, targetPort, label, dir: (args.dir as string) || 'fwd'
           });
           if (!edge) return { content: [{ type: 'text', text: 'Project not found' }] };
           return { content: [{ type: 'text', text: `Flow created:\n${JSON.stringify(edge, null, 2)}` }] };
@@ -654,7 +683,12 @@ export function setupMcp(server: Server, store: Store) {
         case 'update_flow': {
           const { project_id, flow_id, label, dir } = args as any;
           if (!project_id || !flow_id) throw new McpError(ErrorCode.InvalidParams, 'Missing project_id or flow_id');
-          const result = await store.updateEdge(project_id, flow_id, { label, dir });
+          const updates: any = { label, dir };
+          const sp = normalizePort(args.source_port ?? args.sourcePort);
+          const tp = normalizePort(args.target_port ?? args.targetPort);
+          if (sp !== undefined) updates.sourcePort = sp;
+          if (tp !== undefined) updates.targetPort = tp;
+          const result = await store.updateEdge(project_id, flow_id, updates);
           if (!result) throw new McpError(ErrorCode.InternalError, 'Project or edge not found');
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         }

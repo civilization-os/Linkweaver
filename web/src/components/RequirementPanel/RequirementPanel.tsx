@@ -11,6 +11,7 @@ import 'katex/dist/katex.min.css'
 import { Mermaid } from './Mermaid'
 
 export default function RequirementPanel() {
+  const page = useStore(s => s.page)
   const selectedRequirementId = useStore(s => s.selectedRequirementId)
   const selectRequirement = useStore(s => s.selectRequirement)
   const updateRequirement = useStore(s => s.updateRequirement)
@@ -135,9 +136,9 @@ export default function RequirementPanel() {
         className={`flex flex-col z-50 bg-white transition-all duration-300 ${
           isFocusMode 
             ? 'fixed inset-y-8 inset-x-8 md:inset-x-24 lg:inset-x-48 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.15)]' 
-            : 'absolute bottom-0 right-0 w-[500px] border-l border-zinc-200 shadow-2xl animate-in slide-in-from-right-8'
+            : 'absolute bottom-0 right-0 w-[480px] border-l border-slate-200/80 shadow-2xl animate-in slide-in-from-right-8'
         }`}
-        style={!isFocusMode ? { top: '48px' } : undefined}
+        style={!isFocusMode ? { top: page === 'canvas' ? '117px' : '0px' } : undefined}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-200/80">
