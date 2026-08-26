@@ -32,6 +32,7 @@ export default function App() {
   const selectedNodeIds = useStore(s => s.selectedNodeIds)
   const activeBusinessFlowId = useStore(s => s.activeBusinessFlowId)
   const selectedRequirementId = useStore(s => s.selectedRequirementId)
+  const setPage = useStore(s => s.setPage)
 
   const nodes = project?.nodes ?? []
   const edges = project?.edges ?? []
@@ -99,9 +100,13 @@ export default function App() {
               <div className="shrink-0 border-b border-slate-200/80 bg-slate-50/95 px-5 py-3 shadow-[0_1px_0_rgba(15,23,42,0.03)]">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex min-w-[220px] flex-1 items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm">
+                    <button
+                      className="no-drag flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+                      onClick={() => setPage('overview')}
+                      title="返回项目工作台"
+                    >
                       <PanelRight size={17} />
-                    </div>
+                    </button>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <h1 className="truncate text-sm font-bold text-slate-950">{project?.name ?? '未命名项目'}</h1>
